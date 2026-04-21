@@ -11,6 +11,7 @@ import json
 import os
 import random
 from collections import deque
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -399,6 +400,24 @@ async def load_profile(name: str) -> dict:
             await _page.evaluate(f"localStorage.setItem({repr(k)}, {repr(v)})")
 
     return {"loaded": name}
+
+
+async def save_domain_skill(site: str, content: str) -> dict:
+    """Save learned patterns to domain-skills/<site>/<timestamp>.md
+
+    Args:
+        site: Domain name (e.g., 'github', 'linkedin')
+        content: Markdown content with patterns discovered
+
+    Returns:
+        dict with path and timestamp
+    """
+    skill_dir = Path(__file__).parent / "domain-skills" / site
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    skill_file = skill_dir / f"{timestamp}.md"
+    skill_file.write_text(content)
+    return {"saved": site, "path": str(skill_file), "timestamp": timestamp}
 
 
 # --- anti-detect helpers ---
