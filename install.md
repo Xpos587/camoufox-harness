@@ -9,97 +9,181 @@ git clone https://github.com/Xpos587/camoufox-harness
 cd camoufox-harness
 ```
 
-## Start Daemon
+## First Run
 
 ```bash
-# Start Camoufox remote server
-uv run admin.py start
-```
-
-## Verify Installation
-
-```bash
+# Test installation
 uv run run.py <<'PY'
-import asyncio
-async def test():
-    await goto("https://example.com")
-    await wait_for_load()
-    print(await page_info())
-asyncio.run(test())
+await goto("https://example.com")
+await wait_for_load()
+print(await page_info())
 PY
 ```
+
+**First run downloads Firefox binary** (~300MB) via Camoufox. One-time operation.
 
 ## Configure Environment
 
 Create `.env` file (optional):
 
 ```bash
-# Instance name (for multiple browsers)
+# Instance name (for multiple browser profiles)
 CH_NAME=default
 
-# WebSocket URL (default: ws://127.0.0.1:9222/camoufox)
-CH_WS_URL=ws://127.0.0.1:9222/camoufox
-
-# Daemon port
-CH_PORT=9222
-
-# WebSocket path
-CH_WS_PATH=camoufox
+# Browser settings
+CH_HEADLESS=true          # Headless mode
+CH_HUMANIZE=true           # Human-like delays
+CH_GEOIP=true              # Auto geolocation
+CH_LOCALE=en-US            # Language/region
 ```
+
+## Data Persistence
+
+All browser data persists automatically in `~/.config/camoufox-harness/profiles/<CH_NAME>/`:
+
+- Cookies
+- localStorage
+- Session state
+- Extensions
+
+No manual save/load needed — data survives restarts.
+
+## Multiple Profiles
+
+```bash
+# Profile 1
+CH_NAME=work uv run run.py <<'PY'
+await goto("https://github.com")
+PY
+
+# Profile 2 (separate cookies/storage)
+CH_NAME=personal uv run run.py <<'PY'
+await goto("https://github.com")
+PY
+```
+
+Each profile stores data in:
+- `~/.config/camoufox-harness/profiles/work/`
+- `~/.config/camoufox-harness/profiles/personal/`
 
 ## Anti-Detect Features
 
 Camoufox includes built-in anti-detection:
 
 - **humanize**: Human-like mouse movement and delays
-- **geoip**: Geolocation spoofing
-- **fingerprint**: Randomized browser fingerprint
-- **nagle**: Network timing optimization
+- **geoip**: Geolocation spoofing based on IP
+- **fingerprint**: Randomized browser fingerprint via BrowserForge
+- **UBO**: uBlock Origin with ad/tracker blocking
 
-Enable per-request:
+Enabled via environment variables (see above).
 
-```python
-from helpers import stealth_mode, human_click, human_type
-
-await stealth_mode(enable=True)
-await human_click("#submit-button")
-await human_type("#search", "query")
-```
-
-## Profile Management
-
-Save/load browser sessions:
+### Human-like Interaction
 
 ```python
-# Save current session (cookies, localStorage)
-await save_profile("mysession")
+from helpers import human_click, human_type, random_delay
 
-# Load saved session
-await load_profile("mysession")
+await human_click("#submit-button")  # Random delays
+await human_type("#search", "query")  # Typing variation
+await random_delay(0.5, 2)            # Random pause
 ```
 
-## Daemon Commands
+## Video Recording
 
-```bash
-uv run admin.py start     # Start daemon
-uv run admin.py stop      # Stop daemon
-uv run admin.py restart   # Restart daemon
-uv run admin.py status    # Check status
+Record agent actions as MP4:
+
+```python
+async def demo():
+    await goto("https://example.com")
+    await click("#button")
+    await wait(1)
+
+info = await record_screen(demo, fps=10)
+print(f"Video: {info['video_path']}")
+# → ~/Videos/camoufox-recordings/recording-...mp4
+```
+
+Works in headless mode (uses Playwright screenshots).
+
+## Domain Skills
+
+Pre-configured patterns for 67+ websites in `domain-skills/`:
+
+- **GitHub**: Trending repos, API data
+- **Amazon**: Product search, prices
+- **Ozon**: Search, scam detection, seller trust
+- **Google**: Maps, Scholar
+- **Twitter/X**: Search, profiles
+- **Reddit**: Threads, comments
+- **LinkedIn**: Profiles, jobs
+- And 60+ more...
+
+```python
+# Example: GitHub trending
+await goto("https://github.com/trending")
+await wait_for_load()
+await wait(2)
+
+repos = json.loads(await js("""
+  Array.from(document.querySelectorAll('article.Box-row')).map(el => ({
+    name: el.querySelector('h2 a')?.innerText,
+    url: 'https://github.com' + el.querySelector('h2 a')?.href
+  }))
+"""))
 ```
 
 ## Troubleshooting
 
-**Daemon not responding:**
+**First run slow?**
+Downloading Firefox binary (~300MB). Check progress in terminal output.
+
+**Port conflicts?**
+No ports used — persistent context architecture, no daemon needed.
+
+**Camoufox binary location:**
+Downloads to `~/.local/share/camoufox/` or system temp. Reused on subsequent runs.
+
+**Headless vs headful:**
 ```bash
-uv run admin.py restart
+# Headless (default)
+CH_HEADLESS=true uv run run.py <<'PY' ... PY
+
+# Headful (visible browser)
+CH_HEADLESS=false uv run run.py <<'PY' ... PY
 ```
 
-**Port already in use:**
+**Profile corruption?**
 ```bash
-# Change port in .env
-echo "CH_PORT=9223" >> .env
-uv run admin.py restart
+# Reset profile
+rm -rf ~/.config/camoufox-harness/profiles/default/
 ```
 
-**Camoufox download stuck:**
-First run downloads Firefox binary (~300MB). Check `/tmp/camoufox-harness-*.log` for progress.
+## Dependencies
+
+Dependencies are declared in `pyproject.toml` and `run.py` (PEP 723):
+
+```bash
+playwright>=1.40.0
+camoufox[geoip]>=0.4.0
+pillow>=10.0.0
+imageio[ffmpeg]>=2.31.0
+```
+
+No manual install needed — `uv run` resolves everything.
+
+## Architecture
+
+```
+┌─────────────┐    Async API    ┌──────────────────┐    Playwright    ┌──────────┐
+│   Agent     │ ────────────────▶ │  Persistent     │ ────────────────▶ │ Camoufox │
+│ (run.py)    │   (direct)       │  BrowserContext │                  │ (Firefox) │
+└─────────────┘                  └──────────────────┘                  └──────────┘
+```
+
+**No daemon, no WebSocket, no remote server** — direct Playwright async API.
+
+## Next Steps
+
+- **[README.md](README.md)** — Project overview and features
+- **[CLAUDE.md](CLAUDE.md)** — Architecture and conventions
+- **[SKILL.md](domain-skills/ozon/README.md)** — Example domain skill
+- **[helpers.py](helpers.py)** — Full API reference with docstrings
