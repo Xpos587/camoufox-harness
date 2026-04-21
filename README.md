@@ -5,8 +5,9 @@
 ## Features
 
 - **Anti-Detect**: Human-like behavior, fingerprint randomization, geoip spoofing
-- **Playwright API**: Modern async browser automation
-- **REST Interface**: FastAPI daemon for language-agnostic access
+- **Playwright Async API**: Modern async browser automation
+- **Event-Driven**: Real-time events (dialog detection, console logs, errors)
+- **Camoufox Remote Server**: WebSocket endpoint for browser control
 - **Profile Persistence**: Save/load browser sessions
 - **PEP 723**: Inline dependencies — no venv locking
 
@@ -15,16 +16,18 @@
 ```bash
 git clone https://github.com/Xpos587/camoufox-harness
 cd camoufox-harness
-uv sync
 uv run admin.py start
 ```
 
 ```python
-# uv run run.py <<'PY'
-goto("https://example.com")
-wait_for_load()
-print(page_info())
-# PY
+uv run run.py <<'PY'
+import asyncio
+async def test():
+    await goto("https://example.com")
+    await wait_for_load()
+    print(await page_info())
+asyncio.run(test())
+PY
 ```
 
 ## Documentation
@@ -36,11 +39,13 @@ print(page_info())
 ## Architecture
 
 ```
-┌─────────────┐     HTTP      ┌──────────────┐     Playwright     ┌──────────┐
-│   Agent     │ ────────────▶ │ FastAPI      │ ──────────────────▶ │ Camoufox │
-│ (run.py)    │               │ daemon.py    │                    │ (Firefox) │
-└─────────────┘               └──────────────┘                    └──────────┘
+┌─────────────┐    WebSocket    ┌──────────────────┐    Playwright    ┌──────────┐
+│   Agent     │ ◀─────────────▶ │ Camoufox Remote  │ ────────────────▶ │ Camoufox │
+│ (run.py)    │   (connect)     │ Server           │                  │ (Firefox) │
+└─────────────┘                 └──────────────────┘                  └──────────┘
 ```
+
+Camoufox remote server provides WebSocket endpoint. Agent connects via Playwright's `firefox.connect()`. Events flow through Playwright event handlers.
 
 ## Anti-Detect Features
 

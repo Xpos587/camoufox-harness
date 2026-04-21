@@ -6,88 +6,87 @@ Playwright-based browser automation with anti-detect. Read `helpers.py` for all 
 
 ```python
 # Navigate and interact
-goto("https://example.com")
-wait_for_load()
-click("#submit-button")
-type_text("#search", "query")
-press_key("Enter")
+await goto("https://example.com")
+await wait_for_load()
+await click("#submit-button")
+await type_text("#search", "query")
+await press_key("Enter")
 
 # Get page data
-info = page_info()  # {url, title, w, h}
-html = get_html()
-text = get_text()
+info = await page_info()  # {url, title, w, h}
+html = await get_html()
+text = await get_text()
 
 # Screenshot
-screenshot("/tmp/shot.png")
+await screenshot("/tmp/shot.png")
 
 # Execute JavaScript
-result = js("document.title")
+result = await js("document.title")
+
+# Events
+events = await drain_events()
 ```
 
 ## Anti-Detect Automation
 
 ```python
 # Enable stealth mode
-stealth_mode(enable=True)
+await stealth_mode(enable=True)
 
 # Human-like interaction
-human_click("#button")       # Random delays
-human_type("#input", "text") # Typo simulation
+await human_click("#button")       # Random delays
+await human_type("#input", "text") # Typo simulation
 
 # Random delays
-random_delay(0.5, 2.0)  # 0.5-2.0 seconds
-wait(1.0)               # Fixed delay
+await random_delay(0.5, 2.0)  # 0.5-2.0 seconds
+await wait(1.0)               # Fixed delay
 ```
 
 ## Page Interaction
 
 ```python
 # Wait for load
-wait_for_load(timeout=15.0)
+await wait_for_load(timeout=15.0)
 
 # Scroll
-scroll("down", 300)   # direction, amount
-scroll("up", 300)
+await scroll("down", 300)   # direction, amount
+await scroll("up", 300)
 
 # Tabs
-new_tab("https://example.com")
-switch_tab(0)
-close_tab()
+await new_tab("https://example.com")
+await close_tab()
 
 # Snapshot (accessibility tree)
-snap = snapshot()
+snap = await snapshot()
 ```
 
 ## Cookies & Storage
 
 ```python
 # Get/set cookies
-cookies = get_cookies()
-set_cookies([{"name": "key", "value": "val", "domain": ".example.com"}])
+cookies = await get_cookies()
+await set_cookies([{"name": "key", "value": "val", "domain": ".example.com"}])
 
 # LocalStorage
-ls = get_local_storage()
-set_local_storage({"key": "value"})
+ls = await get_local_storage()
+await set_local_storage({"key": "value"})
 ```
 
 ## Geolocation & Proxy
 
 ```python
 # Set geolocation
-set_geolocation(40.7128, -74.0060)  # NYC
-
-# Set proxy (requires restart)
-set_proxy({"server": "http://proxy:8080"})
+await set_geolocation(40.7128, -74.0060)  # NYC
 ```
 
 ## Profile Persistence
 
 ```python
 # Save session
-save_profile("github-session")
+await save_profile("github-session")
 
 # Load session
-load_profile("github-session")
+await load_profile("github-session")
 ```
 
 ## Best Practices
@@ -96,24 +95,40 @@ load_profile("github-session")
 2. **Add random delays** between actions
 3. **Check for blocking** after navigation
 4. **Save profiles** for session persistence
+5. **Always use async/await** — all functions are async
 
 ## Example: E-commerce Search
 
 ```python
-goto("https://shop.example.com")
-wait_for_load()
+await goto("https://shop.example.com")
+await wait_for_load()
 
-human_type("#search", "laptop")
-press_key("Enter")
-wait_for_load()
+await human_type("#search", "laptop")
+await press_key("Enter")
+await wait_for_load()
 
 # Check for blocking
-text = get_text()
+text = await get_text()
 if "blocked" in text.lower():
-    stealth_mode(enable=True)
-    goto("https://shop.example.com")
+    await stealth_mode(enable=True)
+    await goto("https://shop.example.com")
 
 # Get results
-items = js("Array.from(document.querySelectorAll('.item')).map(el => el.textContent)")
+items = await js("Array.from(document.querySelectorAll('.item')).map(el => el.textContent)")
 print(items)
+```
+
+## Event Detection
+
+```python
+# Navigate and capture events
+await goto("https://example.com")
+await wait_for_load()
+
+# Get all events (load, console, dialog, errors)
+events = await drain_events()
+
+# Filter for specific event types
+dialogs = [e for e in events if e.get('type') == 'dialog']
+errors = [e for e in events if e.get('type') == 'error']
 ```

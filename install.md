@@ -7,26 +7,25 @@ Playwright-based browser automation using Camoufox (Firefox anti-detect browser)
 ```bash
 git clone https://github.com/Xpos587/camoufox-harness
 cd camoufox-harness
-uv sync
 ```
 
 ## Start Daemon
 
 ```bash
-# Start in background
+# Start Camoufox remote server
 uv run admin.py start
-
-# Or run directly (foreground)
-uv run daemon.py
 ```
 
 ## Verify Installation
 
 ```bash
 uv run run.py <<'PY'
-goto("https://example.com")
-wait_for_load()
-print(page_info())
+import asyncio
+async def test():
+    await goto("https://example.com")
+    await wait_for_load()
+    print(await page_info())
+asyncio.run(test())
 PY
 ```
 
@@ -38,12 +37,14 @@ Create `.env` file (optional):
 # Instance name (for multiple browsers)
 CH_NAME=default
 
-# API URL (default: http://127.0.0.1:8765)
-CH_API_URL=http://127.0.0.1:8765
+# WebSocket URL (default: ws://127.0.0.1:9222/camoufox)
+CH_WS_URL=ws://127.0.0.1:9222/camoufox
 
-# Daemon host/port
-CH_HOST=127.0.0.1
-CH_PORT=8765
+# Daemon port
+CH_PORT=9222
+
+# WebSocket path
+CH_WS_PATH=camoufox
 ```
 
 ## Anti-Detect Features
@@ -60,9 +61,9 @@ Enable per-request:
 ```python
 from helpers import stealth_mode, human_click, human_type
 
-stealth_mode(enable=True)
-human_click("#submit-button")
-human_type("#search", "query")
+await stealth_mode(enable=True)
+await human_click("#submit-button")
+await human_type("#search", "query")
 ```
 
 ## Profile Management
@@ -71,10 +72,10 @@ Save/load browser sessions:
 
 ```python
 # Save current session (cookies, localStorage)
-save_profile("mysession")
+await save_profile("mysession")
 
 # Load saved session
-load_profile("mysession")
+await load_profile("mysession")
 ```
 
 ## Daemon Commands
@@ -96,7 +97,7 @@ uv run admin.py restart
 **Port already in use:**
 ```bash
 # Change port in .env
-echo "CH_PORT=8766" >> .env
+echo "CH_PORT=9223" >> .env
 uv run admin.py restart
 ```
 
