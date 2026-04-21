@@ -37,7 +37,19 @@ PY
 - `SKILL.md` — Agent usage guide (including domain skills)
 - `helpers.py` — Core API reference
 - `domain-skills/` — Auto-generated site patterns
-- `interaction-skills/` — Reusable UI patterns (dialogs, dropdowns, uploads, drag-and-drop)
+- `interaction-skills/` — Reusable UI patterns:
+  - `connection.md` — Startup sequence, tab visibility, auto-recovery
+  - `cookies.md` — Cookie management and session persistence
+  - `cross-origin-iframes.md` — Working with iframes across origins
+  - `dialogs.md` — Handling alert/confirm/prompt/beforeunload
+  - `downloads.md` — Browser-triggered downloads
+  - `drag-and-drop.md` — Drag and drop operations
+  - `dropdowns.md` — Native selects, comboboxes, virtualized menus
+  - `network-requests.md` — Request interception and monitoring
+  - `print-as-pdf.md` — PDF generation
+  - `shadow-dom.md` — Piercing shadow DOM
+  - `uploads.md` — File upload handling
+  - `viewport.md` — Viewport control and responsive testing
 
 ## Architecture
 
