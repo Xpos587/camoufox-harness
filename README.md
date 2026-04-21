@@ -37,6 +37,7 @@ PY
 - `SKILL.md` — Agent usage guide (including domain skills)
 - `helpers.py` — Core API reference
 - `domain-skills/` — Auto-generated site patterns
+- `interaction-skills/` — Reusable UI patterns (dialogs, dropdowns, uploads, drag-and-drop)
 
 ## Architecture
 
