@@ -11,6 +11,18 @@ from typing import Optional
 
 from camoufox.async_api import AsyncCamoufox
 
+# Video recording imports
+try:
+    from PIL import Image
+    import numpy as np
+    import imageio.v3 as iio
+    _VIDEO_LIBS_AVAILABLE = True
+except ImportError:
+    _VIDEO_LIBS_AVAILABLE = False
+    Image = None
+    np = None
+    iio = None
+
 
 def _load_env():
     p = Path(__file__).parent / ".env"
@@ -32,6 +44,19 @@ INTERNAL = ("about:", "data:", "chrome://", "chrome-extension://")
 # Persistent profile directory - data survives restarts
 PROFILE_DIR = Path.home() / ".config" / "camoufox-harness" / "profiles" / NAME
 PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+
+# Video recording directory (XDG compliant)
+def _get_videos_dir():
+    """Get XDG Videos directory or fallback."""
+    try:
+        result = os.popen("xdg-user-dir VIDEOS").read().strip()
+        if result and result != "/home/$USER" and Path(result).exists():
+            return Path(result) / "camoufox-recordings"
+    except:
+        pass
+    return Path.home() / "Videos" / "camoufox-recordings"
+
+VIDEOS_DIR = _get_videos_dir()
 
 EVENTS_BUF = 500
 
@@ -202,15 +227,15 @@ async def get_video_path() -> Optional[str]:
     return None  # Screenshots don't support path query during recording
 
 
-async def record_screen(video_dir: str, func, fps: int = 10):
+async def record_screen(func, video_dir: Optional[str] = None, fps: int = 10):
     """Record page actions as screenshot sequence + video.
 
     Captures screenshots after each action, combines to MP4.
     Works in headless mode (uses Playwright screenshots).
 
     Args:
-        video_dir: Directory to save video
         func: Async function to execute while recording
+        video_dir: Directory to save video (default: ~/Videos/camoufox-recordings)
         fps: Target FPS (affects screenshot timing)
 
     Returns:
@@ -221,10 +246,15 @@ async def record_screen(video_dir: str, func, fps: int = 10):
             await goto("https://example.com")
             await click("button")
 
-        info = await record_screen("/tmp/videos", demo)
+        info = await record_screen(demo)
         print(f"Video: {info['video_path']}")
     """
     await _ensure_connection()
+
+    # Use XDG Videos directory as default
+    if video_dir is None:
+        video_dir = str(VIDEOS_DIR)
+
     Path(video_dir).mkdir(parents=True, exist_ok=True)
     
     # Track screenshots and timing
@@ -288,25 +318,53 @@ async def record_screen(video_dir: str, func, fps: int = 10):
     video_path = str(Path(video_dir) / f"recording-{timestamp}.mp4")
     
     if screenshots:
+        if not _VIDEO_LIBS_AVAILABLE:
+            # No video libs available, save as PNG
+            fallback_path = str(Path(video_dir) / f"recording-{timestamp}.png")
+            Path(screenshots[0]["path"]).rename(fallback_path)
+            for s in screenshots[1:]:
+                Path(s["path"]).unlink(missing_ok=True)
+            try:
+                screenshot_dir.rmdir()
+            except:
+                pass
+            return {"video_path": fallback_path, "result": result, "frames": len(screenshots)}
+
         try:
-            from PIL import Image
-            import imageio
-            
-            # Load screenshots in order
-            frames = [Image.open(s["path"]) for s in screenshots]
-            
-            # Save as MP4
-            imageio.mimsave(video_path, frames, fps=fps)
-            
+            # Load screenshots as numpy array
+            frames = [np.array(Image.open(s["path"])) for s in screenshots]
+
+            # Check if all frames have same shape
+            shapes = [f.shape for f in frames]
+            if len(set(str(s) for s in shapes)) > 1:
+                # Frames have different sizes, resize to first frame size
+                target_size = frames[0].shape[:2]
+                frames = [np.array(Image.fromarray(f).resize((target_size[1], target_size[0]))) for f in frames]
+
+            # Stack frames: (N, H, W, C)
+            video_array = np.stack(frames)
+
+            # Save as MP4 (v3 API)
+            iio.imwrite(video_path, video_array, fps=fps, codec='libx264')
+
             # Cleanup frame files
             for s in screenshots:
                 Path(s["path"]).unlink(missing_ok=True)
             screenshot_dir.rmdir()
-            
-        except ImportError:
-            # Fallback: save first screenshot as PNG
+
+        except Exception as e:
+            # Fallback: save screenshots as PNG sequence
             fallback_path = str(Path(video_dir) / f"recording-{timestamp}.png")
             Path(screenshots[0]["path"]).rename(fallback_path)
+
+            # Cleanup remaining frame files
+            for s in screenshots[1:]:
+                Path(s["path"]).unlink(missing_ok=True)
+            try:
+                screenshot_dir.rmdir()
+            except:
+                pass
+
             video_path = fallback_path
     
     return {"video_path": video_path, "result": result, "frames": len(screenshots)}

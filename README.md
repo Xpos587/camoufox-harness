@@ -40,12 +40,12 @@ async def demo():
     await scroll("down", 500)
     await screenshot("/tmp/after.png")
 
-info = await record_screen("/tmp/videos", demo, fps=10)
+info = await record_screen(demo, fps=10)
 print(f"Video: {info['video_path']}, Frames: {info['frames']}")
 PY
 ```
 
-Works in headless mode (uses Playwright screenshots, not screen capture).
+Videos saved to `~/Videos/camoufox-recordings/` (XDG compliant). Works in headless mode.
 
 ## Configuration
 
