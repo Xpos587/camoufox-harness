@@ -53,10 +53,11 @@ imageio[ffmpeg]>=2.31.0
 
 ## Quick Start
 
-Camoufox Harness is available as `camoufox-harness` command:
+Run automation from the skill directory:
 
 ```bash
-camoufox-harness <<'PY'
+cd code
+uv run run.py <<'PY'
 await goto("https://example.com")
 await wait_for_load()
 print(await page_info())
