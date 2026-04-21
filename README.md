@@ -9,6 +9,7 @@
 - **Event-Driven**: Real-time events (dialog detection, console logs, errors)
 - **Camoufox Remote Server**: WebSocket endpoint for browser control
 - **Profile Persistence**: Save/load browser sessions
+- **Domain Skills**: Auto-generated patterns for websites (private APIs, stable selectors, traps)
 - **PEP 723**: Inline dependencies — no venv locking
 
 ## Quick Start
@@ -33,8 +34,9 @@ PY
 ## Documentation
 
 - `install.md` — Installation & setup
-- `SKILL.md` — Agent usage guide
+- `SKILL.md` — Agent usage guide (including domain skills)
 - `helpers.py` — Core API reference
+- `domain-skills/` — Auto-generated site patterns
 
 ## Architecture
 
