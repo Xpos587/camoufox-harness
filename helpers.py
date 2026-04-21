@@ -83,6 +83,8 @@ async def _ensure_connection():
         _page.on("load", _on_load)
         _page.on("console", _on_console)
         _page.on("pageerror", _on_error)
+        
+        await _mark_tab()
 
 
 # --- navigation / page ---
@@ -213,6 +215,24 @@ async def random_delay(min_sec: float = 0.5, max_sec: float = 2.0):
     await asyncio.sleep(random.uniform(min_sec, max_sec))
 
 
+async def _mark_tab():
+    """Prepend 🟢 to tab title so user can see which tab agent controls."""
+    await _ensure_connection()
+    try:
+        await _page.evaluate("if(!document.title.startsWith('🟢 '))document.title='🟢 '+document.title")
+    except Exception:
+        pass
+
+
+async def _unmark_tab():
+    """Remove 🟢 prefix from tab title."""
+    await _ensure_connection()
+    try:
+        await _page.evaluate("if(document.title.startsWith('🟢 '))document.title=document.title.slice(2)")
+    except Exception:
+        pass
+
+
 # --- tabs ---
 async def list_tabs() -> list:
     """List all tabs."""
@@ -224,7 +244,29 @@ async def list_tabs() -> list:
 async def current_tab() -> dict:
     """Get current tab info."""
     await _ensure_connection()
-    return {"id": 0, "url": _page.url, "title": await _page.title()}
+    ctx = _browser.contexts[0]
+    tab_id = ctx.pages.index(_page)
+    return {
+        "id": tab_id,
+        "url": _page.url,
+        "title": await _page.title()
+    }
+
+
+async def switch_tab(tab_id: int) -> dict:
+    """Switch to tab by id."""
+    await _ensure_connection()
+    ctx = _browser.contexts[0]
+    if tab_id < 0 or tab_id >= len(ctx.pages):
+        raise RuntimeError(f"Tab id {tab_id} out of range")
+    # Unmark current tab
+    await _unmark_tab()
+    # Switch to new tab
+    global _page
+    _page = ctx.pages[tab_id]
+    await _page.bring_to_front()
+    await _mark_tab()
+    return {"id": tab_id, "url": _page.url}
 
 
 async def new_tab(url: str = "about:blank") -> dict:
@@ -232,6 +274,10 @@ async def new_tab(url: str = "about:blank") -> dict:
     await _ensure_connection()
     new_page = await _context.new_page()
     await new_page.goto(url)
+    # Update global _page to new tab
+    global _page
+    _page = new_page
+    await _mark_tab()
     return {"id": len(_context.pages) - 1, "url": new_page.url}
 
 
@@ -241,7 +287,9 @@ async def close_tab() -> dict:
     await _page.close()
     # Switch to first available page
     if _context.pages:
+        global _page
         _page = _context.pages[0]
+        await _mark_tab()
     return {"closed": True}
 
 
