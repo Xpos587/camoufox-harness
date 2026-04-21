@@ -2,7 +2,22 @@
 
 Playwright-based browser automation using Camoufox (Firefox anti-detect browser).
 
-## Quick Install
+## Skill Usage
+
+This skill is installed at `~/Skills/camoufox-harness/` and includes a persistent code installation.
+
+```bash
+cd ~/Skills/camoufox-harness
+./camoufox-harness <<'PY'
+await goto("https://example.com")
+await wait_for_load()
+print(await page_info())
+PY
+```
+
+## Repository Installation
+
+For development or standalone use:
 
 ```bash
 git clone https://github.com/Xpos587/camoufox-harness
@@ -12,8 +27,8 @@ cd camoufox-harness
 ## First Run
 
 ```bash
-# Test installation
-uv run run.py <<'PY'
+# Test installation (from repo or skill directory)
+./run.py <<'PY'
 await goto("https://example.com")
 await wait_for_load()
 print(await page_info())
@@ -24,7 +39,7 @@ PY
 
 ## Configure Environment
 
-Create `.env` file (optional):
+Create `.env` file in `code/` directory (optional):
 
 ```bash
 # Instance name (for multiple browser profiles)
@@ -52,12 +67,13 @@ No manual save/load needed — data survives restarts.
 
 ```bash
 # Profile 1
-CH_NAME=work uv run run.py <<'PY'
+cd code
+CH_NAME=work ./run.py <<'PY'
 await goto("https://github.com")
 PY
 
 # Profile 2 (separate cookies/storage)
-CH_NAME=personal uv run run.py <<'PY'
+CH_NAME=personal ./run.py <<'PY'
 await goto("https://github.com")
 PY
 ```
@@ -80,8 +96,6 @@ Enabled via environment variables (see above).
 ### Human-like Interaction
 
 ```python
-from helpers import human_click, human_type, random_delay
-
 await human_click("#submit-button")  # Random delays
 await human_type("#search", "query")  # Typing variation
 await random_delay(0.5, 2)            # Random pause
@@ -106,7 +120,7 @@ Works in headless mode (uses Playwright screenshots).
 
 ## Domain Skills
 
-Pre-configured patterns for 67+ websites in `domain-skills/`:
+Pre-configured patterns for 67+ websites in `code/domain-skills/`:
 
 - **GitHub**: Trending repos, API data
 - **Amazon**: Product search, prices
@@ -145,10 +159,10 @@ Downloads to `~/.local/share/camoufox/` or system temp. Reused on subsequent run
 **Headless vs headful:**
 ```bash
 # Headless (default)
-CH_HEADLESS=true uv run run.py <<'PY' ... PY
+CH_HEADLESS=true ./run.py <<'PY' ... PY
 
 # Headful (visible browser)
-CH_HEADLESS=false uv run run.py <<'PY' ... PY
+CH_HEADLESS=false ./run.py <<'PY' ... PY
 ```
 
 **Profile corruption?**
@@ -168,14 +182,14 @@ pillow>=10.0.0
 imageio[ffmpeg]>=2.31.0
 ```
 
-No manual install needed — `uv run` resolves everything.
+No manual install needed — script is self-executing via PEP 723.
 
 ## Architecture
 
 ```
 ┌─────────────┐    Async API    ┌──────────────────┐    Playwright    ┌──────────┐
 │   Agent     │ ────────────────▶ │  Persistent     │ ────────────────▶ │ Camoufox │
-│ (run.py)    │   (direct)       │  BrowserContext │                  │ (Firefox) │
+│  (run.py)   │   (direct)       │  BrowserContext │                  │ (Firefox) │
 └─────────────┘                  └──────────────────┘                  └──────────┘
 ```
 
@@ -184,6 +198,6 @@ No manual install needed — `uv run` resolves everything.
 ## Next Steps
 
 - **[README.md](README.md)** — Project overview and features
-- **[CLAUDE.md](CLAUDE.md)** — Architecture and conventions
-- **[SKILL.md](domain-skills/ozon/README.md)** — Example domain skill
-- **[helpers.py](helpers.py)** — Full API reference with docstrings
+- **[CLAUDE.md](code/CLAUDE.md)** — Architecture and conventions
+- **[SKILL.md](SKILL.md)** — Agent usage guide
+- **[helpers.py](code/helpers.py)** — Full API reference with docstrings
