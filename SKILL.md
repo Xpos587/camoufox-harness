@@ -297,6 +297,61 @@ with open("results.json", "w") as f:
 - **Dynamic content**: Use `await wait(1-2)` after page load for JS rendering
 - **Profile persistence**: Data survives restarts in `~/.config/camoufox-harness/profiles/`
 
+## Search First
+
+Before writing new automation, search `domain-skills/` for existing patterns:
+
+```bash
+cd code
+rg --files domain-skills
+rg -n "ozon|scam" domain-skills
+```
+
+Only if struggling with a specific mechanic, look in `interaction-skills/` for helpers.
+
+## Always Contribute Back
+
+**If you learned anything non-obvious about how a site works, add it to `domain-skills/<site>/` before you finish.** The harness gets better only because agents file what they learn.
+
+**Worth contributing:**
+- **Private API** — XHR/fetch endpoints, request shape, auth (often 10× faster than DOM)
+- **Stable selector** — beats the obvious one, or obfuscated class to avoid
+- **Framework quirk** — "React combobox only commits on Escape", "Vue list only renders in scroll container"
+- **URL pattern** — direct route, required query params, variant that skips loader
+- **Wait** that `wait_for_load()` misses, with the reason
+- **Trap** — stale drafts, legacy IDs, unicode quirks, CAPTCHA surfaces
+
+**What a domain skill should capture:**
+- URL patterns and query params
+- Private APIs and payload shape
+- Stable selectors (`data-*`, `aria-*`, `role`, semantic classes)
+- Site structure — containers, items per page, framework, state location
+- Framework/interaction quirks unique to this site
+- Waits and reasons they're needed
+- Traps and selectors that *don't* work
+
+**Do not write:**
+- **Raw pixel coordinates** — break on viewport/zoom/layout. Describe how to *locate* the target (selector, `scrollIntoView`, `aria-label`)
+- **Run narration** or step-by-step of the specific task you just did
+- **Secrets, cookies, session tokens, user-specific state**
+
+## What Actually Works
+
+- **Screenshots first** — use `screenshot()` to understand the page quickly, find visible targets
+- **After goto** — always `wait_for_load()` then `await wait(1-2)` for JS rendering
+- **DOM reads** — use `js(...)` for inspection and extraction (JSON output)
+- **Verification** — `print(page_info())` for simple "is this alive?" check
+- **Events** — check `drain_events()` for dialogs after actions that trigger prompts
+- **Anti-detect** — use `human_click()`, `human_type()`, `random_delay()` for human-like behavior
+
+## Design Constraints
+
+- **Camoufox runs locally** — persistent context, no remote server needed
+- **PEP 723 dependencies** — inline in `run.py`, `uv run` resolves automatically
+- **Helpers stay short** — browser primitives in `helpers.py`
+- **Don't add a manager layer** — no retries framework, session manager, config system
+- **The code is the doc** — read `helpers.py` for inline documentation
+
 ## Repository
 
 - **GitHub**: https://github.com/Xpos587/camoufox-harness
