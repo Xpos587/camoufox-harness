@@ -51,9 +51,9 @@ imageio[ffmpeg]>=2.31.0
 
 **First run** downloads Firefox binary (~300MB) via Camoufox.
 
-## Quick Start
+## Fast Start
 
-Run from the skill directory (script is self-executing via PEP 723):
+**Read `helpers.py` first.** For first-time install or setup, read `install.md` first.
 
 ```bash
 ./camoufox-harness <<'PY'
@@ -63,7 +63,9 @@ print(await page_info())
 PY
 ```
 
-**All helpers are pre-imported** — no imports needed in your code.
+- Invoke as `./camoufox-harness` — it's in the skill directory. No `cd`, no `uv run`.
+- All helpers are pre-imported — no imports needed in your code.
+- The code is the doc — `helpers.py` has inline documentation for all functions.
 
 ## Core API
 
