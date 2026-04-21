@@ -52,9 +52,6 @@ async def main_async():
     await _()
 
 
-def main():
-    asyncio.run(main_async())
-
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main_async())
