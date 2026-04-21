@@ -1,183 +1,314 @@
-# Camoufox Harness — Agent Skill
+---
+name: camoufox-harness
+description: >
+  Use when the user wants to automate browser interactions, scrape websites, test web applications,
+  or interact with e-commerce platforms like Ozon, Amazon, or GitHub. Trigger on requests like:
+  "automate this website", "scrape product data", "test login flow", "interact with Ozon/Amazon",
+  or any browser automation task requiring anti-detection features.
+---
 
-Playwright-based browser automation with anti-detect. Read `helpers.py` for all available functions.
+# Camoufox Harness — Browser Automation with Anti-Detection
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Prerequisites](#prerequisites)
+- [Quick Start](#quick-start)
+- [Core API](#core-api)
+- [Domain Skills](#domain-skills)
+- [Interaction Skills](#interaction-skills)
+- [Video Recording](#video-recording)
+- [Anti-Detect Features](#anti-detect-features)
+- [Examples](#examples)
+
+## Overview
+
+Playwright-based browser automation using **Camoufox** (Firefox with built-in anti-detection).
+
+**Key capabilities:**
+- Navigate, click, type, scroll — full browser control
+- Event-driven: dialog detection, console logs, errors
+- Persistent context: cookies, localStorage, sessions survive restarts
+- Anti-detect: humanize delays, fingerprint randomization, geoip spoofing
+- Video recording: screen capture for demos/debugging
+- Domain skills: 67+ pre-configured site patterns (GitHub, Amazon, Ozon, etc.)
+
+**Workflow:**
+```
+User Query → Select Domain Skill → Run helpers.py functions → Extract data
+```
+
+## Prerequisites
+
+**Dependencies** (auto-installed via PEP 723):
+```bash
+# No manual install needed - uv run resolves dependencies
+playwright>=1.40.0
+camoufox[geoip]>=0.4.0
+pillow>=10.0.0
+imageio[ffmpeg]>=2.31.0
+```
+
+**First run** downloads Firefox binary (~300MB) via Camoufox.
 
 ## Quick Start
 
-```python
-# Navigate and interact
+```bash
+# Clone repository
+git clone https://github.com/Xpos587/camoufox-harness
+cd camoufox-harness
+
+# Run automation
+uv run run.py <<'PY'
 await goto("https://example.com")
 await wait_for_load()
-await click("#submit-button")
-await type_text("#search", "query")
-await press_key("Enter")
+print(await page_info())
+PY
+```
 
-# Get page data
-info = await page_info()  # {url, title, w, h}
-html = await get_html()
-text = await get_text()
+**All helpers are pre-imported** — no imports needed in your code.
 
-# Screenshot
+## Core API
+
+### Navigation
+
+```python
+# Navigate to URL
+await goto("https://github.com")
+await wait_for_load()
+
+# Get page info
+info = await page_info()
+# → {"url": "...", "title": "...", "w": 1280, "h": 720}
+
+# Take screenshot
 await screenshot("/tmp/shot.png")
-
-# Execute JavaScript
-result = await js("document.title")
-
-# Events
-events = await drain_events()
 ```
 
-## Anti-Detect Automation
+### Input
 
 ```python
-# Enable stealth mode
-await stealth_mode(enable=True)
+# Click element
+await click("#submit-button")
 
-# Human-like interaction
-await human_click("#button")       # Random delays
-await human_type("#input", "text") # Typo simulation
+# Type text
+await type_text("#search", "mechanical keyboard")
 
-# Random delays
-await random_delay(0.5, 2.0)  # 0.5-2.0 seconds
-await wait(1.0)               # Fixed delay
-```
-
-## Page Interaction
-
-```python
-# Wait for load
-await wait_for_load(timeout=15.0)
+# Press key
+await press_key("Enter")
 
 # Scroll
-await scroll("down", 300)   # direction, amount
-await scroll("up", 300)
+await scroll("down", 500)
+```
 
-# Tabs
+### Tabs
+
+```python
+# New tab (marked with 🟢)
 await new_tab("https://example.com")
-await close_tab()
 
-# Snapshot (accessibility tree)
-snap = await snapshot()
+# Switch tab
+await switch_tab(tab_id)
+
+# List tabs
+tabs = await list_tabs()
 ```
 
-## Cookies & Storage
+### Events
 
 ```python
-# Get/set cookies
-cookies = await get_cookies()
-await set_cookies([{"name": "key", "value": "val", "domain": ".example.com"}])
-
-# LocalStorage
-ls = await get_local_storage()
-await set_local_storage({"key": "value"})
-```
-
-## Geolocation & Proxy
-
-```python
-# Set geolocation
-await set_geolocation(40.7128, -74.0060)  # NYC
-```
-
-## Profile Persistence
-
-All data persists automatically in `~/.config/camoufox-harness/profiles/<CH_NAME>/`:
-
-- Cookies
-- localStorage
-- Session state
-
-No manual save/load needed — just restart and continue.
-
-### Multiple Profiles
-
-```bash
-# Use different profiles for separate sessions
-CH_NAME=work uv run run.py <<'PY'
-await goto("https://github.com")
-PY
-
-CH_NAME=personal uv run run.py <<'PY'
-await goto("https://github.com")
-PY
-```
-
-## Best Practices
-
-1. **Use stealth_mode()** for anti-bot sites
-2. **Add random delays** between actions
-3. **Check for blocking** after navigation
-4. **Use CH_NAME env var** for multiple profiles
-5. **Always use async/await** — all functions are async
-6. **Contribute domain skills** — When you learn non-obvious patterns about a site, save them with `save_domain_skill()`
-
-## Example: E-commerce Search
-
-```python
-await goto("https://shop.example.com")
-await wait_for_load()
-
-await human_type("#search", "laptop")
-await press_key("Enter")
-await wait_for_load()
-
-# Check for blocking
-text = await get_text()
-if "blocked" in text.lower():
-    await stealth_mode(enable=True)
-    await goto("https://shop.example.com")
-
-# Get results
-items = await js("Array.from(document.querySelectorAll('.item')).map(el => el.textContent)")
-print(items)
-```
-
-## Event Detection
-
-```python
-# Navigate and capture events
-await goto("https://example.com")
-await wait_for_load()
-
-# Get all events (load, console, dialog, errors)
+# Drain accumulated events
 events = await drain_events()
 
-# Filter for specific event types
-dialogs = [e for e in events if e.get('type') == 'dialog']
-errors = [e for e in events if e.get('type') == 'error']
+# Filter events
+dialogs = [e for e in events if e["type"] == "dialog"]
+errors = [e for e in events if e["type"] == "error"]
+```
+
+### Storage
+
+```python
+# Get cookies
+cookies = await get_cookies()
+
+# Get localStorage
+storage = await get_local_storage()
 ```
 
 ## Domain Skills
 
-Domain skills are auto-generated `.md` files containing learned patterns for specific websites. When you navigate to a site, `goto()` returns available skills.
+Pre-configured patterns for 67+ websites in `domain-skills/`:
+
+| Site | Skills | Use Cases |
+|------|--------|-----------|
+| **GitHub** | scraping, repo-actions | Trending repos, API data, commits |
+| **Amazon** | product-search | Product cards, prices, ratings |
+| **Ozon** | search, product-analysis, scam-detection | Product search, seller trust, review analysis |
+| **Google** | maps, scholar | Maps data, academic papers |
+| **Twitter/X** | search, profile | Tweet extraction, user data |
+| **Reddit** | search, comments | Thread analysis, comment scraping |
+| **LinkedIn** | profile, jobs | Profile data, job postings |
+| **Netflix** | browse | Catalog scraping |
+| **Stack Overflow** | search, answers | Question/answer extraction |
+
+**Example: GitHub scraping**
+```python
+# Trending repos
+await goto("https://github.com/trending")
+await wait_for_load()
+await wait(2)
+
+repos = json.loads(await js("""
+  Array.from(document.querySelectorAll('article.Box-row')).map(el => ({
+    name: el.querySelector('h2 a')?.innerText,
+    url: 'https://github.com' + el.querySelector('h2 a')?.href,
+    stars: el.querySelector('a[href*="/stargazers"]')?.innerText
+  }))
+"""))
+```
+
+**Example: Ozon scam detection**
+```python
+# Search products
+await goto("https://www.ozon.ru/search/?text=ноутбук")
+products = json.loads(await js("/* extraction from domain-skills/ozon/search.md */"))
+
+# Analyze seller trust
+result = await full_scam_check(products[0]['url'])
+# → {"verdict": "SAFE"/"CAUTION"/"AVOID", "score": 5, "red_flags": [...]}
+```
+
+## Interaction Skills
+
+Reusable UI patterns in `interaction-skills/`:
+
+| Skill | Description |
+|-------|-------------|
+| **dialogs.md** | alert/confirm/prompt handling |
+| **dropdowns.md** | Native selects, virtualized menus |
+| **uploads.md** | File upload via set_input_files() |
+| **drag-and-drop.md** | Drag operations API |
+| **network-requests.md** | Request interception/monitoring |
+| **shadow-dom.md** | Piercing shadow DOM |
+| **viewport.md** | Viewport control for responsive testing |
+
+## Video Recording
+
+Record agent actions as MP4 video:
 
 ```python
-# Navigate and check for existing skills
-result = await goto("https://github.com")
-print(result["domain_skills"])  # ['20260421-123456.md', ...]
+async def demo():
+    await goto("https://example.com")
+    await click("#button")
+    await wait(1)
 
-# Save learned patterns
-await save_domain_skill("github", """
-# GitHub Login Patterns
-
-## Stable Selectors
-- Login button: `[href="/login"]`
-- Email input: `#login_field`
-
-## URL Patterns
-- Direct login: https://github.com/login
-- Session persists across subdomains
-
-## Traps
-- Avoid `.js-*` classes (obfuscated)
-- 2FA may appear after successful auth
-""")
+info = await record_screen(demo, fps=10)
+# → {"video_path": "~/Videos/camoufox-recordings/recording-...mp4", "frames": 15}
 ```
 
-**What to save in domain skills:**
-- Private API endpoints
-- Stable selectors (`data-*`, `aria-*`, `role`)
-- URL patterns and query params
-- Framework quirks
-- Traps and selectors that DON'T work
+**Works in headless mode** — uses Playwright screenshots, not screen capture.
+
+## Anti-Detect Features
+
+| Feature | Description |
+|---------|-------------|
+| **humanize** | Random delays, human-like cursor movement |
+| **geoip** | Geolocation spoofing based on IP |
+| **fingerprint** | Randomized browser fingerprint via BrowserForge |
+| **UBO** | uBlock Origin with ad/tracker blocking |
+
+**Configuration** (`.env` file):
+```bash
+CH_HEADLESS=true          # Headless mode
+CH_HUMANIZE=true           # Human-like delays
+CH_GEOIP=true              # Auto geolocation
+CH_LOCALE=en-US            # Language/region
+CH_NAME=default            # Instance name (for multiple profiles)
 ```
+
+## Data Persistence
+
+All browser data persists in `~/.config/camoufox-harness/profiles/<CH_NAME>/`:
+
+- Cookies
+- localStorage
+- Session state
+- Extensions
+
+No manual save/load needed — just restart and continue.
+
+## Examples
+
+### Web scraping
+
+```python
+await goto("https://news.ycombinator.com")
+await wait_for_load()
+
+stories = json.loads(await js("""
+  Array.from(document.querySelectorAll('.titleline > a')).map(a => ({
+    title: a.innerText,
+    url: a.href
+  }))
+"""))
+```
+
+### Form automation
+
+```python
+await goto("https://example.com/login")
+await type_text("#email", "user@example.com")
+await type_text("#password", "secret")
+await click("#login-button")
+await wait_for_load()
+```
+
+### E-commerce monitoring
+
+```python
+# Search Amazon
+await goto("https://www.amazon.com/s?k=mechanical+keyboard")
+await wait_for_load()
+await wait(2)
+
+products = json.loads(await js("/* from domain-skills/amazon/product-search.md */"))
+deals = [p for p in products if int(p.get('discount_pct', 0)) >= 30]
+```
+
+### Multi-step workflow
+
+```python
+# Navigate through pages
+await goto("https://example.com")
+await click("#products")
+await wait_for_load()
+
+# Extract data
+items = json.loads(await js("..."))
+
+# Save to file
+import json
+with open("results.json", "w") as f:
+    json.dump(items, f)
+```
+
+## Gotchas
+
+- **First run**: Downloads Firefox binary (~300MB) — one-time operation
+- **Event handlers**: Dialogs auto-detected via `drain_events()`
+- **Selectors**: Use CSS selectors, avoid obfuscated classes
+- **Dynamic content**: Use `await wait(1-2)` after page load for JS rendering
+- **Profile persistence**: Data survives restarts in `~/.config/camoufox-harness/profiles/`
+
+## Repository
+
+- **GitHub**: https://github.com/Xpos587/camoufox-harness
+- **Documentation**: `README.md`, `CLAUDE.md`, `helpers.py` (inline docs)
+- **Domain skills**: `domain-skills/` (67+ sites)
+- **Interaction skills**: `interaction-skills/` (19 patterns)
+
+## See Also
+
+- **[SKILL.md](domain-skills/ozon/README.md)** — Ozon integration example
+- **[helpers.py](helpers.py)** — Full API reference with docstrings
+- **[CLAUDE.md](CLAUDE.md)** — Project architecture and conventions
