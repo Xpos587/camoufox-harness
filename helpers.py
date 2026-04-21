@@ -241,7 +241,6 @@ async def close_tab() -> dict:
     await _page.close()
     # Switch to first available page
     if _context.pages:
-        global _page
         _page = _context.pages[0]
     return {"closed": True}
 
