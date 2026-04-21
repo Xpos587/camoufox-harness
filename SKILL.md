@@ -53,12 +53,11 @@ imageio[ffmpeg]>=2.31.0
 
 ## Quick Start
 
-```bash
-# Clone repository
-git clone https://github.com/Xpos587/camoufox-harness
-cd camoufox-harness
+This skill uses a persistent installation at `~/Skills/camoufox-harness/code/`.
 
-# Run automation
+```bash
+# Already cloned! Run directly:
+cd ~/Skills/camoufox-harness/code
 uv run run.py <<'PY'
 await goto("https://example.com")
 await wait_for_load()
@@ -137,7 +136,7 @@ storage = await get_local_storage()
 
 ## Domain Skills
 
-Pre-configured patterns for 67+ websites in `domain-skills/`:
+Pre-configured patterns for 67+ websites in `code/domain-skills/`:
 
 | Site | Skills | Use Cases |
 |------|--------|-----------|
@@ -180,7 +179,7 @@ result = await full_scam_check(products[0]['url'])
 
 ## Interaction Skills
 
-Reusable UI patterns in `interaction-skills/`:
+Reusable UI patterns in `code/interaction-skills/`:
 
 | Skill | Description |
 |-------|-------------|
@@ -217,7 +216,7 @@ info = await record_screen(demo, fps=10)
 | **fingerprint** | Randomized browser fingerprint via BrowserForge |
 | **UBO** | uBlock Origin with ad/tracker blocking |
 
-**Configuration** (`.env` file):
+**Configuration** (`code/.env` file):
 ```bash
 CH_HEADLESS=true          # Headless mode
 CH_HUMANIZE=true           # Human-like delays
@@ -299,16 +298,17 @@ with open("results.json", "w") as f:
 - **Selectors**: Use CSS selectors, avoid obfuscated classes
 - **Dynamic content**: Use `await wait(1-2)` after page load for JS rendering
 - **Profile persistence**: Data survives restarts in `~/.config/camoufox-harness/profiles/`
+- **Skill location**: All commands run from `~/Skills/camoufox-harness/code/`
 
 ## Repository
 
 - **GitHub**: https://github.com/Xpos587/camoufox-harness
-- **Documentation**: `README.md`, `CLAUDE.md`, `helpers.py` (inline docs)
-- **Domain skills**: `domain-skills/` (67+ sites)
-- **Interaction skills**: `interaction-skills/` (19 patterns)
+- **Documentation**: `code/README.md`, `code/CLAUDE.md`, `code/helpers.py` (inline docs)
+- **Domain skills**: `code/domain-skills/` (67+ sites)
+- **Interaction skills**: `code/interaction-skills/` (19 patterns)
 
 ## See Also
 
-- **[SKILL.md](domain-skills/ozon/README.md)** — Ozon integration example
-- **[helpers.py](helpers.py)** — Full API reference with docstrings
-- **[CLAUDE.md](CLAUDE.md)** — Project architecture and conventions
+- **[references/api.md](references/api.md)** — Full API reference
+- **[references/examples.md](references/examples.md)** — Common automation patterns
+- **[code/CLAUDE.md](code/CLAUDE.md)** — Project architecture and conventions
