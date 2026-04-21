@@ -234,11 +234,34 @@ async def _unmark_tab():
 
 
 # --- tabs ---
-async def list_tabs() -> list:
+async def list_tabs(include_chrome: bool = True) -> list:
     """List all tabs."""
     await _ensure_connection()
     ctx = _browser.contexts[0]
-    return [{"id": i, "url": p.url, "title": await p.title()} for i, p in enumerate(ctx.pages)]
+    tabs = []
+    for i, p in enumerate(ctx.pages):
+        url = p.url
+        if not include_chrome and url.startswith(INTERNAL):
+            continue
+        tabs.append({"id": i, "url": url, "title": await p.title()})
+    return tabs
+
+
+async def ensure_real_tab():
+    """Switch to a real user tab if current is internal/stale. Returns tab info or None."""
+    await _ensure_connection()
+    tabs = await list_tabs(include_chrome=False)
+    if not tabs:
+        return None
+    try:
+        cur = await current_tab()
+        if cur["url"] and not cur["url"].startswith(INTERNAL):
+            return cur
+    except Exception:
+        pass
+    # Switch to first real tab
+    await switch_tab(tabs[0]["id"])
+    return tabs[0]
 
 
 async def current_tab() -> dict:
