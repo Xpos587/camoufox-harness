@@ -120,7 +120,8 @@ CH_LOCALE=en-US                     # Language/region
 
 ### Storage
 - `get_cookies()` / `set_cookies()` — cookie management
-- `save_profile(name)` / `load_profile(name)` — session persistence
+- `get_local_storage()` / `set_local_storage()` — localStorage access
+- Session persists automatically in `~/.config/camoufox-harness/profiles/<CH_NAME>/`
 
 ## Domain Skills
 

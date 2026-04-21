@@ -81,12 +81,25 @@ await set_geolocation(40.7128, -74.0060)  # NYC
 
 ## Profile Persistence
 
-```python
-# Save session
-await save_profile("github-session")
+All data persists automatically in `~/.config/camoufox-harness/profiles/<CH_NAME>/`:
 
-# Load session
-await load_profile("github-session")
+- Cookies
+- localStorage
+- Session state
+
+No manual save/load needed — just restart and continue.
+
+### Multiple Profiles
+
+```bash
+# Use different profiles for separate sessions
+CH_NAME=work uv run run.py <<'PY'
+await goto("https://github.com")
+PY
+
+CH_NAME=personal uv run run.py <<'PY'
+await goto("https://github.com")
+PY
 ```
 
 ## Best Practices
@@ -94,7 +107,7 @@ await load_profile("github-session")
 1. **Use stealth_mode()** for anti-bot sites
 2. **Add random delays** between actions
 3. **Check for blocking** after navigation
-4. **Save profiles** for session persistence
+4. **Use CH_NAME env var** for multiple profiles
 5. **Always use async/await** — all functions are async
 6. **Contribute domain skills** — When you learn non-obvious patterns about a site, save them with `save_domain_skill()`
 
