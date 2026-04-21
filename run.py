@@ -7,24 +7,18 @@
 """Camoufox Harness CLI (async)."""
 import asyncio
 import sys
-from admin import ensure_daemon
 from helpers import *
 
 HELP = """Camoufox Harness — Playwright-based browser automation with anti-detect.
 
-Read SKILL.md for the default workflow and examples.
-
-Typical usage:
-  uv run camoufox-harness <<'PY'
-  import asyncio
-  async def test():
-      await goto("https://example.com")
-      await wait_for_load()
-      print(await page_info())
-  asyncio.run(test())
+Usage:
+  uv run run.py <<'PY'
+  await goto("https://example.com")
+  await wait_for_load()
+  print(await page_info())
   PY
 
-Helpers are pre-imported. The daemon auto-starts Camoufox browser.
+Helpers are pre-imported. Persistent context saves data automatically.
 """
 
 
@@ -36,24 +30,20 @@ async def main_async():
     if sys.stdin.isatty():
         sys.exit(
             "camoufox-harness reads Python from stdin. Use:\n"
-            "  uv run camoufox-harness <<'PY'\n"
-            "  print(page_info())\n"
+            "  uv run run.py <<'PY'\n"
+            "  await goto('https://example.com')\n"
+            "  await wait_for_load()\n"
+            "  print(await page_info())\n"
             "  PY"
         )
 
-    await ensure_daemon()
-
     code = sys.stdin.read()
 
-    # Execute async code
-    # Wrap in async function if needed
-    if "await " in code:
-        exec(code)
-    else:
-        # Auto-await for simple scripts
-        result = eval(code)
-        if asyncio.iscoroutine(result):
-            await result
+    # Wrap in async function to support await
+    lines = code.splitlines()
+    wrapped = "async def _():\n    " + "\n    ".join(lines)
+    exec(wrapped, globals())
+    await _()
 
 
 def main():

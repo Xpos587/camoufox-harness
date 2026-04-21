@@ -5,9 +5,8 @@
 # ]
 # ///
 
-"""Async browser control via Camoufox remote server."""
+"""Async browser control via Camoufox persistent context."""
 import asyncio
-import json
 import os
 import random
 from collections import deque
@@ -15,7 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from playwright.async_api import async_playwright, Browser, Page, BrowserContext
+from camoufox.async_api import AsyncCamoufox
 
 
 def _load_env():
@@ -33,19 +32,24 @@ def _load_env():
 _load_env()
 
 NAME = os.environ.get("CH_NAME", "default")
-WS_URL = os.environ.get("CH_WS_URL", "ws://127.0.0.1:9222/camoufox")
 INTERNAL = ("about:", "data:", "chrome://", "chrome-extension://")
 
+# Persistent profile directory - data survives restarts
 PROFILE_DIR = Path.home() / ".config" / "camoufox-harness" / "profiles" / NAME
 PROFILE_DIR.mkdir(parents=True, exist_ok=True)
 
 EVENTS_BUF = 500
 
-# Global state
-_playwright = None
-_browser: Optional[Browser] = None
-_context: Optional[BrowserContext] = None
-_page: Optional[Page] = None
+# Camoufox configuration from environment
+_CH_HEADLESS = os.environ.get("CH_HEADLESS", "true").lower() == "true"
+_CH_HUMANIZE = os.environ.get("CH_HUMANIZE", "true").lower() == "true"
+_CH_GEOIP = os.environ.get("CH_GEOIP", "true").lower() == "true"
+_CH_LOCALE = os.environ.get("CH_LOCALE", None)
+
+# Global state - persistent context only (no browser object)
+_pw: Optional = None  # Playwright instance
+_context: Optional = None  # BrowserContext
+_page: Optional = None  # Page
 _events = deque(maxlen=EVENTS_BUF)
 
 
@@ -66,14 +70,42 @@ def _on_error(error):
 
 
 async def _ensure_connection():
-    """Connect to Camoufox remote server if not connected."""
-    global _playwright, _browser, _context, _page
+    """Start persistent Camoufox context if not started."""
+    global _pw, _context, _page
 
-    if _browser is None:
-        _playwright = await async_playwright().start()
-        _browser = await _playwright.firefox.connect(WS_URL)
-        _context = _browser.contexts[0]
+    if _context is None:
+        from playwright.async_api import async_playwright
+        from camoufox.async_api import AsyncNewBrowser
+        from camoufox.utils import launch_options
 
+        # Build Camoufox config with best practices
+        opt = launch_options(
+            headless=_CH_HEADLESS,
+            humanize=_CH_HUMANIZE,
+            geoip=_CH_GEOIP,
+        )
+
+        # Add locale if specified
+        if _CH_LOCALE:
+            opt = launch_options(
+                headless=_CH_HEADLESS,
+                humanize=_CH_HUMANIZE,
+                geoip=_CH_GEOIP,
+                locale=_CH_LOCALE,
+            )
+
+        # Add persistent profile path
+        opt["user_data_dir"] = str(PROFILE_DIR)
+
+        # Launch with persistent context
+        _pw = await async_playwright().start()
+        _context = await AsyncNewBrowser(
+            _pw,
+            persistent_context=True,
+            from_options=opt,
+        )
+
+        # Get first page or create new one
         if _context.pages:
             _page = _context.pages[0]
         else:
@@ -84,8 +116,20 @@ async def _ensure_connection():
         _page.on("load", _on_load)
         _page.on("console", _on_console)
         _page.on("pageerror", _on_error)
-        
+
         await _mark_tab()
+
+
+async def _cleanup():
+    """Close persistent context."""
+    global _pw, _context, _page
+    if _context:
+        await _context.close()
+        _context = None
+        _page = None
+    if _pw:
+        await _pw.stop()
+        _pw = None
 
 
 # --- navigation / page ---
@@ -111,7 +155,7 @@ async def goto(url: str, wait_until: str = "domcontentloaded") -> dict:
 async def page_info() -> dict:
     """{url, title, w, h} — current page state."""
     await _ensure_connection()
-    vp = await _page.viewport_size()
+    vp = _page.viewport_size
     return {
         "url": _page.url,
         "title": await _page.title(),
@@ -150,11 +194,10 @@ async def type_text(selector: str, text: str, delay: float = 0.05) -> dict:
 async def press_key(key: str, modifiers: list = None) -> dict:
     """Press keyboard key (Enter, Tab, Escape, etc.)."""
     await _ensure_connection()
-    mods = []
+    # Playwright key combo syntax: "Control+A" not modifiers array
     if modifiers:
-        mod_map = {"Alt": "Alt", "Control": "Control", "Meta": "Meta", "Shift": "Shift"}
-        mods = [mod_map.get(m, m) for m in modifiers]
-    await _page.keyboard.press(key, modifiers=mods)
+        key = "+".join(modifiers + [key])
+    await _page.keyboard.press(key)
     return {"pressed": key}
 
 
@@ -250,9 +293,8 @@ async def _unmark_tab():
 async def list_tabs(include_chrome: bool = True) -> list:
     """List all tabs."""
     await _ensure_connection()
-    ctx = _browser.contexts[0]
     tabs = []
-    for i, p in enumerate(ctx.pages):
+    for i, p in enumerate(_context.pages):
         url = p.url
         if not include_chrome and url.startswith(INTERNAL):
             continue
@@ -280,8 +322,7 @@ async def ensure_real_tab():
 async def current_tab() -> dict:
     """Get current tab info."""
     await _ensure_connection()
-    ctx = _browser.contexts[0]
-    tab_id = ctx.pages.index(_page)
+    tab_id = _context.pages.index(_page)
     return {
         "id": tab_id,
         "url": _page.url,
@@ -292,14 +333,13 @@ async def current_tab() -> dict:
 async def switch_tab(tab_id: int) -> dict:
     """Switch to tab by id."""
     await _ensure_connection()
-    ctx = _browser.contexts[0]
-    if tab_id < 0 or tab_id >= len(ctx.pages):
+    if tab_id < 0 or tab_id >= len(_context.pages):
         raise RuntimeError(f"Tab id {tab_id} out of range")
     # Unmark current tab
     await _unmark_tab()
     # Switch to new tab
     global _page
-    _page = ctx.pages[tab_id]
+    _page = _context.pages[tab_id]
     await _page.bring_to_front()
     await _mark_tab()
     return {"id": tab_id, "url": _page.url}
@@ -319,11 +359,11 @@ async def new_tab(url: str = "about:blank") -> dict:
 
 async def close_tab() -> dict:
     """Close current tab."""
+    global _page
     await _ensure_connection()
     await _page.close()
     # Switch to first available page
     if _context.pages:
-        global _page
         _page = _context.pages[0]
         await _mark_tab()
     return {"closed": True}
@@ -378,40 +418,8 @@ async def set_local_storage(items: dict) -> dict:
 
 
 # --- session ---
-async def save_profile(name: str) -> dict:
-    """Save current browser state to profile."""
-    await _ensure_connection()
-    profile_path = PROFILE_DIR / name
-    profile_path.mkdir(parents=True, exist_ok=True)
-
-    cookies = await _context.cookies()
-    (profile_path / "cookies.json").write_text(json.dumps(cookies))
-
-    ls = await _page.evaluate("Object.assign({}, localStorage)")
-    (profile_path / "localStorage.json").write_text(json.dumps(ls))
-
-    return {"saved": name, "path": str(profile_path)}
-
-
-async def load_profile(name: str) -> dict:
-    """Load browser state from profile."""
-    await _ensure_connection()
-    profile_path = PROFILE_DIR / name
-    if not profile_path.exists():
-        raise RuntimeError(f"Profile not found: {name}")
-
-    cookies_file = profile_path / "cookies.json"
-    if cookies_file.exists():
-        cookies = json.loads(cookies_file.read_text())
-        await _context.add_cookies(cookies)
-
-    ls_file = profile_path / "localStorage.json"
-    if ls_file.exists():
-        ls = json.loads(ls_file.read_text())
-        for k, v in ls.items():
-            await _page.evaluate(f"localStorage.setItem({repr(k)}, {repr(v)})")
-
-    return {"loaded": name}
+# Note: save_profile/load_profile removed - persistence is automatic with user_data_dir
+# Data is stored in PROFILE_DIR and survives restarts
 
 
 async def save_domain_skill(site: str, content: str) -> dict:
@@ -468,3 +476,9 @@ async def drain_events() -> list:
     events = list(_events)
     _events.clear()
     return events
+
+
+# --- profile info ---
+def get_profile_dir() -> str:
+    """Get current persistent profile directory path."""
+    return str(PROFILE_DIR)
