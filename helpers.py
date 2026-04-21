@@ -1,16 +1,10 @@
-# /// script
-# dependencies = [
-#   "playwright>=1.40.0",
-#   "camoufox[geoip]>=0.4.0",
-# ]
-# ///
-
 """Async browser control via Camoufox persistent context."""
 import asyncio
 import os
 import random
 from collections import deque
 from datetime import datetime
+from functools import wraps
 from pathlib import Path
 from typing import Optional
 
@@ -53,20 +47,9 @@ _page: Optional = None  # Page
 _events = deque(maxlen=EVENTS_BUF)
 
 
-def _on_dialog(dialog):
-    _events.append({"type": "dialog", "message": dialog.message, "dialog_type": dialog.type})
-
-
-def _on_load():
-    _events.append({"type": "load", "url": _page.url})
-
-
-def _on_console(msg):
-    _events.append({"type": "console", "level": msg.type, "text": msg.text})
-
-
-def _on_error(error):
-    _events.append({"type": "error", "message": str(error)})
+def _on_event(evt_type, data):
+    """Generic event handler - reduces 4 handlers to 1."""
+    _events.append({"type": evt_type, **data})
 
 
 async def _ensure_connection():
@@ -78,46 +61,41 @@ async def _ensure_connection():
         from camoufox.async_api import AsyncNewBrowser
         from camoufox.utils import launch_options
 
-        # Build Camoufox config with best practices
-        opt = launch_options(
-            headless=_CH_HEADLESS,
-            humanize=_CH_HUMANIZE,
-            geoip=_CH_GEOIP,
-        )
-
-        # Add locale if specified
+        # Build config (avoid duplicate launch_options calls)
+        kwargs = {
+            "headless": _CH_HEADLESS,
+            "humanize": _CH_HUMANIZE,
+            "geoip": _CH_GEOIP,
+        }
         if _CH_LOCALE:
-            opt = launch_options(
-                headless=_CH_HEADLESS,
-                humanize=_CH_HUMANIZE,
-                geoip=_CH_GEOIP,
-                locale=_CH_LOCALE,
-            )
+            kwargs["locale"] = _CH_LOCALE
 
-        # Add persistent profile path
+        opt = launch_options(**kwargs)
         opt["user_data_dir"] = str(PROFILE_DIR)
 
         # Launch with persistent context
         _pw = await async_playwright().start()
-        _context = await AsyncNewBrowser(
-            _pw,
-            persistent_context=True,
-            from_options=opt,
-        )
+        _context = await AsyncNewBrowser(_pw, persistent_context=True, from_options=opt)
 
         # Get first page or create new one
-        if _context.pages:
-            _page = _context.pages[0]
-        else:
-            _page = await _context.new_page()
+        _page = _context.pages[0] if _context.pages else await _context.new_page()
 
-        # Subscribe to events
-        _page.on("dialog", _on_dialog)
-        _page.on("load", _on_load)
-        _page.on("console", _on_console)
-        _page.on("pageerror", _on_error)
+        # Subscribe to events (using generic handler)
+        _page.on("dialog", lambda d: _on_event("dialog", {"message": d.message, "dialog_type": d.type}))
+        _page.on("load", lambda: _on_event("load", {"url": _page.url}))
+        _page.on("console", lambda m: _on_event("console", {"level": m.type, "text": m.text}))
+        _page.on("pageerror", lambda e: _on_event("error", {"message": str(e)}))
 
         await _mark_tab()
+
+
+def _connected(func):
+    """Decorator: ensures connection before calling async function."""
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        await _ensure_connection()
+        return await func(*args, **kwargs)
+    return wrapper
 
 
 async def _cleanup():
@@ -133,40 +111,28 @@ async def _cleanup():
 
 
 # --- navigation / page ---
+@_connected
 async def goto(url: str, wait_until: str = "domcontentloaded") -> dict:
     """Navigate to URL. Returns {url, title, domain_skills}."""
-    await _ensure_connection()
     await _page.goto(url, wait_until=wait_until)
-    # Check for domain skills
     from urllib.parse import urlparse
     domain = urlparse(url).hostname or ""
     domain = domain.removeprefix("www.").split(".")[0]
     skill_dir = Path(__file__).parent / "domain-skills" / domain
-    skills = []
-    if skill_dir.exists():
-        skills = sorted(p.name for p in skill_dir.rglob("*.md"))[:10]
-    return {
-        "url": _page.url,
-        "title": await _page.title(),
-        "domain_skills": skills
-    }
+    skills = sorted(p.name for p in skill_dir.rglob("*.md"))[:10] if skill_dir.exists() else []
+    return {"url": _page.url, "title": await _page.title(), "domain_skills": skills}
 
 
+@_connected
 async def page_info() -> dict:
     """{url, title, w, h} — current page state."""
-    await _ensure_connection()
     vp = _page.viewport_size
-    return {
-        "url": _page.url,
-        "title": await _page.title(),
-        "w": vp["width"],
-        "h": vp["height"],
-    }
+    return {"url": _page.url, "title": await _page.title(), "w": vp["width"], "h": vp["height"]}
 
 
+@_connected
 async def wait_for_load(timeout: float = 15.0) -> bool:
     """Wait for page load complete."""
-    await _ensure_connection()
     try:
         await _page.wait_for_load_state("domcontentloaded", timeout=timeout * 1000)
         return True
@@ -175,89 +141,72 @@ async def wait_for_load(timeout: float = 15.0) -> bool:
 
 
 # --- input ---
+@_connected
 async def click(selector: str, button: str = "left", clicks: int = 1) -> dict:
     """Click element by CSS selector."""
-    await _ensure_connection()
     await _page.locator(selector).click(button=button, click_count=clicks)
     return {"clicked": selector}
 
 
+@_connected
 async def type_text(selector: str, text: str, delay: float = 0.05) -> dict:
     """Type text into element."""
-    await _ensure_connection()
     el = _page.locator(selector)
     await el.fill("")
     await el.type(text, delay=delay * 1000)
     return {"typed": text}
 
 
+@_connected
 async def press_key(key: str, modifiers: list = None) -> dict:
     """Press keyboard key (Enter, Tab, Escape, etc.)."""
-    await _ensure_connection()
-    # Playwright key combo syntax: "Control+A" not modifiers array
     if modifiers:
         key = "+".join(modifiers + [key])
     await _page.keyboard.press(key)
     return {"pressed": key}
 
 
+@_connected
 async def scroll(direction: str = "down", amount: int = 300) -> dict:
     """Scroll page (up/down/left/right)."""
-    await _ensure_connection()
-    if direction == "down":
-        await _page.evaluate(f"window.scrollBy(0, {amount})")
-    elif direction == "up":
-        await _page.evaluate(f"window.scrollBy(0, -{amount})")
-    elif direction == "left":
-        await _page.evaluate(f"window.scrollBy(-{amount}, 0)")
-    elif direction == "right":
-        await _page.evaluate(f"window.scrollBy({amount}, 0)")
+    await _page.evaluate(f"window.scrollBy(0, {amount if direction == 'down' else -amount if direction == 'up' else 0 if direction in ('up', 'down') else {amount if direction == 'right' else -amount}})")
     return {"scrolled": direction}
 
 
-# --- visual ---
+@_connected
 async def screenshot(path: str = "/tmp/shot.png", full: bool = False) -> str:
     """Take screenshot. Returns path to saved file."""
-    await _ensure_connection()
     data = await _page.screenshot(full_page=full)
-    with open(path, "wb") as f:
-        f.write(data)
+    Path(path).write_bytes(data)
     return path
 
 
+@_connected
 async def snapshot() -> dict:
     """Get accessibility tree snapshot with element refs."""
-    await _ensure_connection()
     snap = await _page.accessibility.snapshot()
-    return {"snapshot": snap, "element_count": _count_elements(snap)}
+
+    def count(node):
+        return 1 + sum(count(c) for c in node.get("children", [])) if isinstance(node, dict) else 0
+
+    return {"snapshot": snap, "element_count": count(snap)}
 
 
-def _count_elements(node, count=0):
-    """Recursively count elements in accessibility tree."""
-    if not isinstance(node, dict):
-        return count
-    count += 1
-    for child in node.get("children", []):
-        count = _count_elements(child, count)
-    return count
-
-
-# --- utility ---
+@_connected
 async def js(expression: str):
     """Execute JavaScript in page context."""
-    await _ensure_connection()
     return await _page.evaluate(expression)
 
 
+@_connected
 async def get_html() -> str:
     """Get page HTML."""
-    await _ensure_connection()
     return await _page.content()
 
 
+@_connected
 async def get_text() -> str:
     """Get page visible text."""
-    await _ensure_connection()
     return await _page.evaluate("document.body.innerText")
 
 
@@ -273,26 +222,24 @@ async def random_delay(min_sec: float = 0.5, max_sec: float = 2.0):
 
 async def _mark_tab():
     """Prepend 🟢 to tab title so user can see which tab agent controls."""
-    await _ensure_connection()
     try:
         await _page.evaluate("if(!document.title.startsWith('🟢 '))document.title='🟢 '+document.title")
-    except Exception:
+    except:
         pass
 
 
 async def _unmark_tab():
     """Remove 🟢 prefix from tab title."""
-    await _ensure_connection()
     try:
         await _page.evaluate("if(document.title.startsWith('🟢 '))document.title=document.title.slice(2)")
-    except Exception:
+    except:
         pass
 
 
 # --- tabs ---
+@_connected
 async def list_tabs(include_chrome: bool = True) -> list:
     """List all tabs."""
-    await _ensure_connection()
     tabs = []
     for i, p in enumerate(_context.pages):
         url = p.url
@@ -302,9 +249,9 @@ async def list_tabs(include_chrome: bool = True) -> list:
     return tabs
 
 
+@_connected
 async def ensure_real_tab():
     """Switch to a real user tab if current is internal/stale. Returns tab info or None."""
-    await _ensure_connection()
     tabs = await list_tabs(include_chrome=False)
     if not tabs:
         return None
@@ -312,32 +259,25 @@ async def ensure_real_tab():
         cur = await current_tab()
         if cur["url"] and not cur["url"].startswith(INTERNAL):
             return cur
-    except Exception:
+    except:
         pass
-    # Switch to first real tab
     await switch_tab(tabs[0]["id"])
     return tabs[0]
 
 
+@_connected
 async def current_tab() -> dict:
     """Get current tab info."""
-    await _ensure_connection()
     tab_id = _context.pages.index(_page)
-    return {
-        "id": tab_id,
-        "url": _page.url,
-        "title": await _page.title()
-    }
+    return {"id": tab_id, "url": _page.url, "title": await _page.title()}
 
 
+@_connected
 async def switch_tab(tab_id: int) -> dict:
     """Switch to tab by id."""
-    await _ensure_connection()
     if tab_id < 0 or tab_id >= len(_context.pages):
         raise RuntimeError(f"Tab id {tab_id} out of range")
-    # Unmark current tab
     await _unmark_tab()
-    # Switch to new tab
     global _page
     _page = _context.pages[tab_id]
     await _page.bring_to_front()
@@ -345,73 +285,61 @@ async def switch_tab(tab_id: int) -> dict:
     return {"id": tab_id, "url": _page.url}
 
 
+@_connected
 async def new_tab(url: str = "about:blank") -> dict:
     """Open new tab."""
-    await _ensure_connection()
-    new_page = await _context.new_page()
-    await new_page.goto(url)
-    # Update global _page to new tab
     global _page
-    _page = new_page
+    _page = await _context.new_page()
+    await _page.goto(url)
     await _mark_tab()
-    return {"id": len(_context.pages) - 1, "url": new_page.url}
+    return {"id": len(_context.pages) - 1, "url": _page.url}
 
 
+@_connected
 async def close_tab() -> dict:
     """Close current tab."""
     global _page
-    await _ensure_connection()
     await _page.close()
-    # Switch to first available page
     if _context.pages:
         _page = _context.pages[0]
         await _mark_tab()
     return {"closed": True}
 
 
+@_connected
 async def iframe_target(url_substr: str) -> Optional:
-    """Find first iframe whose URL contains `url_substr`. Returns frame object or None.
-
-    Usage:
-        frame = await iframe_target("checkout.com")
-        if frame:
-            await frame.locator("#pay").click()
-            await frame.locator("#email").fill("test@example.com")
-    """
+    """Find first iframe whose URL contains `url_substr`. Returns frame object or None."""
     if not url_substr:
         return None
-
-    await _ensure_connection()
     for frame in _page.frames:
-        frame_url = getattr(frame, 'url', '') or ''
-        if frame_url and url_substr in frame_url:
+        if url_substr in (getattr(frame, 'url', '') or ''):
             return frame
     return None
 
 
 # --- cookie/storage ---
+@_connected
 async def get_cookies() -> list:
     """Get all cookies."""
-    await _ensure_connection()
     return await _context.cookies()
 
 
+@_connected
 async def set_cookies(cookies: list) -> dict:
     """Set cookies."""
-    await _ensure_connection()
     await _context.add_cookies(cookies)
     return {"set": True}
 
 
+@_connected
 async def get_local_storage() -> dict:
     """Get localStorage."""
-    await _ensure_connection()
     return await _page.evaluate("Object.assign({}, localStorage)")
 
 
+@_connected
 async def set_local_storage(items: dict) -> dict:
     """Set localStorage items."""
-    await _ensure_connection()
     for k, v in items.items():
         await _page.evaluate(f"localStorage.setItem({repr(k)}, {repr(v)})")
     return {"set": True}
@@ -419,19 +347,11 @@ async def set_local_storage(items: dict) -> dict:
 
 # --- session ---
 # Note: save_profile/load_profile removed - persistence is automatic with user_data_dir
-# Data is stored in PROFILE_DIR and survives restarts
 
 
+@_connected
 async def save_domain_skill(site: str, content: str) -> dict:
-    """Save learned patterns to domain-skills/<site>/<timestamp>.md
-
-    Args:
-        site: Domain name (e.g., 'github', 'linkedin')
-        content: Markdown content with patterns discovered
-
-    Returns:
-        dict with path and timestamp
-    """
+    """Save learned patterns to domain-skills/<site>/<timestamp>.md"""
     skill_dir = Path(__file__).parent / "domain-skills" / site
     skill_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -441,6 +361,7 @@ async def save_domain_skill(site: str, content: str) -> dict:
 
 
 # --- anti-detect helpers ---
+@_connected
 async def human_click(selector: str) -> dict:
     """Human-like click with random delays."""
     await random_delay(0.1, 0.3)
@@ -449,6 +370,7 @@ async def human_click(selector: str) -> dict:
     return result
 
 
+@_connected
 async def human_type(selector: str, text: str, typo_rate: float = 0.02) -> dict:
     """Human-like typing with random delays and typos."""
     for char in text:
@@ -466,7 +388,6 @@ async def human_type(selector: str, text: str, typo_rate: float = 0.02) -> dict:
 
 async def stealth_mode(enable: bool = True) -> dict:
     """Toggle stealth mode."""
-    # Camoufox handles stealth via launch parameters
     return {"stealth": enable}
 
 
