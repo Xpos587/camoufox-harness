@@ -13,10 +13,8 @@ venv/
 
 # Logs
 *.log
+/logs/
 /tmp/
-
-# Profiles (may contain sensitive data)
-.config/camoufox-harness/profiles/
 
 # OS
 .DS_Store
@@ -26,3 +24,12 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Videos (recordings)
+*.mp4
+*.png
+!/domain-skills/**/images/*.png
+
+# Project-specific
+docs/
+adapt_*.py
