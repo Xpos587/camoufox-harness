@@ -1,4 +1,12 @@
-# Walmart — Product Search & Data Extraction
+# 
+> **Adapted from browser-harness to camoufox-harness (Playwright API)**
+>
+> Original browser-harness code used CDP/sync calls. This has been adapted to use Playwright async API.
+>
+> If you find issues, check `helpers.py` for available functions.
+
+
+Walmart — Product Search & Data Extraction
 
 Field-tested against walmart.com on 2026-04-18 using `http_get` (no browser required).
 All code blocks were run and outputs verified against live responses.
@@ -104,8 +112,8 @@ def extract_search_results(html):
     sr = data["props"]["pageProps"]["initialData"]["searchResult"]
 
     items = []
-    for stack in sr.get("itemStacks", []):
-        for item in stack.get("items", []):
+    async for stack in sr.get("itemStacks", []):
+        async for item in stack.get("items", []):
             pi = item.get("priceInfo") or {}
             img = item.get("imageInfo") or {}
             rating = item.get("rating") or {}
@@ -158,7 +166,7 @@ organic = [i for i in items if not i["isSponsored"]]
 ### Pagination
 
 ```python
-for page in range(1, max_page + 1):
+async for page in range(1, max_page + 1):
     html = fetch_walmart(f"https://www.walmart.com/search?q=laptop&page={page}")
     items, _, _ = extract_search_results(html)
     # process items...
@@ -346,17 +354,17 @@ Use the browser harness when:
 
 ```python
 # Browser-based search extraction
-new_tab("https://www.walmart.com/search?q=laptop")
-wait_for_load()
-wait(2)  # JS renders product cards after readyState=complete
+await new_tab("https://www.walmart.com/search?q=laptop")
+await wait_for_load()
+await wait(2)  # JS renders product cards after readyState=complete
 
 # Extract via __NEXT_DATA__ in-browser (identical structure to http_get)
 import json
-nd = js("document.getElementById('__NEXT_DATA__')?.textContent")
+nd = await js("document.getElementById('__NEXT_DATA__')?.textContent")
 data = json.loads(nd)
 sr = data["props"]["pageProps"]["initialData"]["searchResult"]
 items = []
-for stack in sr.get("itemStacks", []):
+async for stack in sr.get("itemStacks", []):
     items.extend(stack.get("items", []))
 ```
 
@@ -364,7 +372,7 @@ for stack in sr.get("itemStacks", []):
 
 ```python
 # Product cards on search results page
-results = js("""
+results = await js("""
   Array.from(document.querySelectorAll('[data-item-id]')).map(el => ({
     itemId:    el.getAttribute('data-item-id'),
     name:      el.querySelector('[itemprop="name"]')?.innerText?.trim(),
@@ -374,7 +382,7 @@ results = js("""
 """)
 
 # If [data-item-id] misses items, use the Next.js data attribute alternative:
-results_alt = js("""
+results_alt = await js("""
   Array.from(document.querySelectorAll('[data-testid="list-view"]'))
     .map(el => el.innerText.trim())
 """)
@@ -385,13 +393,13 @@ results_alt = js("""
 
 ### Session gotcha
 
-Always open Walmart with `new_tab()` on first visit:
+Always open Walmart with `await new_tab()` on first visit:
 ```python
-new_tab("https://www.walmart.com/search?q=laptop")
-wait_for_load()
-wait(2)
+await new_tab("https://www.walmart.com/search?q=laptop")
+await wait_for_load()
+await wait(2)
 ```
-After that, `goto()` works normally within the same session.
+After that, `await goto()` works normally within the same session.
 
 ---
 

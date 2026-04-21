@@ -1,4 +1,12 @@
-# Facebook Pages — mining a public Page's feed for posts + external URLs
+# 
+> **Adapted from browser-harness to camoufox-harness (Playwright API)**
+>
+> Original browser-harness code used CDP/sync calls. This has been adapted to use Playwright async API.
+>
+> If you find issues, check `helpers.py` for available functions.
+
+
+Facebook Pages — mining a public Page's feed for posts + external URLs
 
 Companion to `groups.md`. Most of the DOM surface is shared because FB renders
 post articles from the same React component in both contexts — the differences
@@ -73,7 +81,7 @@ verified, follower count, website. Pull it in one JS call before you start
 scrolling the feed.
 
 ```python
-meta = js("""
+meta = await js("""
   ({
     name: document.querySelector('h1')?.innerText || null,
     verified: !!document.querySelector('h1 svg[aria-label*="Verified"]'),
@@ -100,8 +108,8 @@ seen = {}  # permalink -> dict
 TARGET = 50
 MAX_SCROLLS = 30
 
-for i in range(MAX_SCROLLS):
-    batch = js("""
+async for i in range(MAX_SCROLLS):
+    batch = await js("""
       Array.from(document.querySelectorAll('div[role="article"]')).map(el => {
         const link = el.querySelector('a[href*="/posts/"][href*="pfbid"], a[href*="/permalink.php"], a[href*="/story.php"]');
         const body = el.querySelector('div[data-ad-preview="message"], div[data-ad-comet-preview="message"]');
@@ -116,12 +124,12 @@ for i in range(MAX_SCROLLS):
         };
       }).filter(p => p.url)
     """) or []
-    for p in batch:
+    async for p in batch:
         seen.setdefault(p["url"], p)
     if len(seen) >= TARGET:
         break
     scroll(640, 400, dy=900)
-    wait(2.5)
+    await wait(2.5)
 ```
 
 Notes:
@@ -177,7 +185,7 @@ at the screen, and don't try to auto-resolve.
 ## Self-inspection block (run when selectors stop working)
 
 ```python
-print(js("""
+print(await js("""
   ({
     articles: document.querySelectorAll('div[role="article"]').length,
     body_preview_a: document.querySelectorAll('div[data-ad-preview="message"]').length,
@@ -205,16 +213,16 @@ PAGE = "BoatingOntario.ca"   # vanity slug OR numeric Page ID
 TARGET = 30
 MAX_SCROLLS = 25
 
-goto(f"https://www.facebook.com/{PAGE}/posts")
-wait_for_load()
-wait(3)
+await goto(f"https://www.facebook.com/{PAGE}/posts")
+await wait_for_load()
+await wait(3)
 
-info = page_info()
+info = await page_info()
 if "/checkpoint/" in info["url"] or "/login" in info["url"]:
     sys.exit("AUTH_WALL — stop and have the account re-verify.")
 
 # Header metadata
-meta = js("""
+meta = await js("""
   ({
     name: document.querySelector('h1')?.innerText || null,
     verified: !!document.querySelector('h1 svg[aria-label*="Verified"]'),
@@ -229,8 +237,8 @@ meta = js("""
 # Feed sweep
 seen = {}
 empty_streak = 0
-for _ in range(MAX_SCROLLS):
-    batch = js("""
+async for _ in range(MAX_SCROLLS):
+    batch = await js("""
       Array.from(document.querySelectorAll('div[role="article"]')).map(el => {
         const link = el.querySelector('a[href*="/posts/"][href*="pfbid"], a[href*="/permalink.php"], a[href*="/story.php"]');
         const body = el.querySelector('div[data-ad-preview="message"], div[data-ad-comet-preview="message"]');
@@ -241,13 +249,13 @@ for _ in range(MAX_SCROLLS):
       }).filter(p => p.url)
     """) or []
     before = len(seen)
-    for p in batch:
+    async for p in batch:
         seen.setdefault(p["url"], p)
     empty_streak = empty_streak + 1 if len(seen) == before else 0
     if len(seen) >= TARGET or empty_streak >= 2:
         break
     scroll(640, 400, dy=900)
-    wait(2.5)
+    await wait(2.5)
 
 def decode(u):
     if not u.startswith("https://l.facebook.com/l.php"): return u
@@ -258,7 +266,7 @@ posts = list(seen.values())
 if meta.get("website_redirector"):
     meta["website"] = decode(meta["website_redirector"])
 all_externals = sorted({decode(x) for p in posts for x in p["externals"]})
-screenshot(f"/tmp/fb-page-{PAGE}.png", full=True)
+await screenshot(f"/tmp/fb-page-{PAGE}.png", full=True)
 print(json.dumps({
     "page": PAGE,
     "meta": meta,

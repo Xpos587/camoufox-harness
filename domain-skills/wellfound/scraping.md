@@ -1,4 +1,12 @@
-# Wellfound (AngelList) — Startup Jobs & Company Profiles
+# 
+> **Adapted from browser-harness to camoufox-harness (Playwright API)**
+>
+> Original browser-harness code used CDP/sync calls. This has been adapted to use Playwright async API.
+>
+> If you find issues, check `helpers.py` for available functions.
+
+
+Wellfound (AngelList) — Startup Jobs & Company Profiles
 
 Field-tested against wellfound.com on 2026-04-18.
 All confirmed via live HTTP probes and response header analysis.
@@ -29,7 +37,7 @@ Old AngelList public API (`api.angel.co/1/...`) returns `404 Not Found` — perm
 
 The 403 response body contains a DataDome captcha challenge script (`geo.captcha-delivery.com`) AND an embedded Cloudflare challenge (`window.__CF$cv$params`). Both fire simultaneously. Neither cookie can be replayed — both are TLS-fingerprint-bound.
 
-**Use `new_tab()` + `wait()` exclusively. Never use `http_get` for Wellfound.**
+**Use `await new_tab()` + `await wait()` exclusively. Never use `http_get` for Wellfound.**
 
 ---
 
@@ -57,23 +65,23 @@ Implications:
 ## Do this first: open in new tab, wait for DataDome to resolve
 
 ```python
-new_tab("https://wellfound.com/company/stripe")
-wait_for_load()
-wait(5)   # DataDome JS fingerprinting runs ~2-4s after readyState=complete
+await new_tab("https://wellfound.com/company/stripe")
+await wait_for_load()
+await wait(5)   # DataDome JS fingerprinting runs ~2-4s after readyState=complete
 ```
 
 Verify you are past the DataDome challenge before extracting:
 
 ```python
-title = js("document.title")
-url = page_info()["url"]
+title = await js("document.title")
+url = await page_info()["url"]
 
 if "wellfound.com" not in url or not title or "Just a moment" in title:
     # DataDome or CF challenge did not resolve — wait longer
-    wait(8)
-    title = js("document.title")
+    await wait(8)
+    title = await js("document.title")
     if "Just a moment" in title or not title:
-        screenshot("/tmp/wellfound_block.png")
+        await screenshot("/tmp/wellfound_block.png")
         raise RuntimeError("DataDome/CF challenge did not resolve — see screenshot")
 ```
 
@@ -106,13 +114,13 @@ Navigate to the company page and extract structured data. Most fields are visibl
 ```python
 import json
 
-new_tab("https://wellfound.com/company/stripe")
-wait_for_load()
-wait(5)
+await new_tab("https://wellfound.com/company/stripe")
+await wait_for_load()
+await wait(5)
 
 # Check for Apollo state (Rails + React app, not Next.js)
 # Wellfound embeds data in window.gon or inline script tags
-apollo_raw = js("""
+apollo_raw = await js("""
 (function() {
   // Try window.__APOLLO_STATE__ (Apollo Client cache)
   if (window.__APOLLO_STATE__) return JSON.stringify(window.__APOLLO_STATE__);
@@ -155,7 +163,7 @@ If the structured data path fails, fall back to DOM extraction:
 
 ```python
 # DOM extraction — company profile page
-profile = js("""
+profile = await js("""
 (function() {
   // Company name — first h1 on the page
   var nameEl = document.querySelector('h1');
@@ -211,11 +219,11 @@ print(json.dumps(data, indent=2))
 import json
 
 company_slug = "stripe"
-new_tab(f"https://wellfound.com/company/{company_slug}/jobs")
-wait_for_load()
-wait(5)
+await new_tab(f"https://wellfound.com/company/{company_slug}/jobs")
+await wait_for_load()
+await wait(5)
 
-jobs = js("""
+jobs = await js("""
 (function() {
   // Job listing cards — Wellfound uses role="listitem" or li elements in job list
   var cards = document.querySelectorAll('[data-test^="StartupJobListing"], li[class*="job"], div[class*="JobListing"]');
@@ -244,7 +252,7 @@ jobs = js("""
 
 results = json.loads(jobs)
 print(f"Found {len(results)} jobs")
-for j in results:
+async for j in results:
     print(f"  {j['title']} | {j.get('location','?')} | {j.get('comp','?')}")
 ```
 
@@ -257,12 +265,12 @@ The main `/jobs` page shows a curated job feed. Filters are not accessible via U
 ```python
 import json
 
-new_tab("https://wellfound.com/jobs")
-wait_for_load()
-wait(5)
+await new_tab("https://wellfound.com/jobs")
+await wait_for_load()
+await wait(5)
 
 # Extract visible job cards
-jobs = js("""
+jobs = await js("""
 (function() {
   // Job cards on the main /jobs board
   var cards = document.querySelectorAll(
@@ -311,12 +319,12 @@ Wellfound's GraphQL endpoint (`/graphql`) requires:
 import json
 
 # Step 1: Load any Wellfound page so the session cookie + DataDome cookie are set
-new_tab("https://wellfound.com/")
-wait_for_load()
-wait(5)
+await new_tab("https://wellfound.com/")
+await wait_for_load()
+await wait(5)
 
 # Step 2: Extract CSRF token from meta tag
-csrf = js("document.querySelector('meta[name=\"csrf-token\"]') ? document.querySelector('meta[name=\"csrf-token\"]').getAttribute('content') : null")
+csrf = await js("document.querySelector('meta[name=\"csrf-token\"]') ? document.querySelector('meta[name=\"csrf-token\"]').getAttribute('content') : null")
 if not csrf:
     raise RuntimeError("CSRF token not found — page may not have loaded correctly")
 
@@ -324,7 +332,7 @@ print(f"CSRF token: {csrf[:20]}...")
 
 # Step 3: Execute GraphQL query via fetch() from within the browser
 # This uses the browser's existing cookies automatically
-result = js(f"""
+result = await js(f"""
 (async function() {{
   try {{
     var resp = await fetch('/graphql', {{
@@ -364,10 +372,10 @@ result = js(f"""
 }})()
 """)
 
-# js() with async returns a Promise — use js_async() if available, or eval trick:
-# Note: the above may return None if js() doesn't await Promises.
-# Use this pattern instead if js() doesn't handle async:
-result_sync = js("""
+# await js() with async returns a Promise — use js_async() if available, or eval trick:
+# Note: the above may return None if await js() doesn't await Promises.
+# Use this pattern instead if await js() doesn't handle async:
+result_sync = await js("""
 var done = false, out = null;
 fetch('/graphql', {
   method: 'POST',
@@ -386,7 +394,7 @@ fetch('/graphql', {
 """)
 # Wait for async result
 import time; time.sleep(3)
-gql_result = js("window._wf_gql_result || null")
+gql_result = await js("window._wf_gql_result || null")
 if gql_result:
     data = json.loads(gql_result)
     print("GraphQL response:", json.dumps(data, indent=2)[:1000])
@@ -416,7 +424,7 @@ Company overview pages typically show content without login. Job listings requir
 ```python
 def dismiss_wellfound_login_modal():
     """Close the Wellfound sign-in modal. Safe to call if no modal is present."""
-    closed = js("""
+    closed = await js("""
     (function() {
       var selectors = [
         'button[aria-label="Close"]',
@@ -431,7 +439,7 @@ def dismiss_wellfound_login_modal():
       for (var s of selectors) {
         var btn = document.querySelector(s);
         if (btn && btn.offsetParent !== null) {
-          btn.click();
+          btn.await click();
           return s;
         }
       }
@@ -441,7 +449,7 @@ def dismiss_wellfound_login_modal():
     })()
     """)
     if closed:
-        wait(1)
+        await wait(1)
     return closed
 ```
 
@@ -449,31 +457,31 @@ def dismiss_wellfound_login_modal():
 
 ## Detecting DataDome / challenge page
 
-After `new_tab()` + `wait(5)`, verify you are on a real Wellfound page:
+After `await new_tab()` + `await wait(5)`, verify you are on a real Wellfound page:
 
 ```python
 def wellfound_is_blocked() -> bool:
     """True if DataDome or Cloudflare challenge is still showing."""
-    title = js("document.title") or ""
-    url   = page_info()["url"]
+    title = await js("document.title") or ""
+    url   = await page_info()["url"]
     # DataDome challenge page has no useful title; CF shows "Just a moment..."
     blocked = (
         "Just a moment" in title or
         "wellfound.com" not in url or
-        "captcha-delivery.com" in js("document.body.innerHTML or ''") or
+        "captcha-delivery.com" in await js("document.body.innerHTML or ''") or
         not title
     )
     return blocked
 
 # Usage
-new_tab("https://wellfound.com/company/stripe")
-wait_for_load()
-wait(5)
+await new_tab("https://wellfound.com/company/stripe")
+await wait_for_load()
+await wait(5)
 
 if wellfound_is_blocked():
-    wait(8)   # DataDome sometimes needs up to 10s total
+    await wait(8)   # DataDome sometimes needs up to 10s total
     if wellfound_is_blocked():
-        screenshot("/tmp/wellfound_blocked.png")
+        await screenshot("/tmp/wellfound_blocked.png")
         raise RuntimeError("DataDome/CF challenge did not resolve — see /tmp/wellfound_blocked.png")
 ```
 
@@ -503,12 +511,12 @@ Wellfound uses **Tailwind CSS** — no stable semantic class names. These patter
 
 1. **`http_get` is permanently blocked.** DataDome intercepts all non-browser HTTP requests with
    a 403 + captcha challenge. No User-Agent, header combination, or cookie replay works.
-   `api.angel.co` is HTTP 404 (shut down). Use `new_tab()` exclusively.
+   `api.angel.co` is HTTP 404 (shut down). Use `await new_tab()` exclusively.
 
 2. **NOT a Next.js app.** Wellfound is Ruby on Rails + React. There is no `__NEXT_DATA__` JSON
    blob. Look for `window.__APOLLO_STATE__`, `window.gon`, or inline `<script>` tags instead.
 
-3. **`wait(5)` minimum after `wait_for_load()`.** DataDome runs JS fingerprinting probes for
+3. **`await wait(5)` minimum after `await wait_for_load()`.** DataDome runs JS fingerprinting probes for
    2-4 seconds after `readyState = complete`. Extracting before this resolves returns the challenge
    page HTML, not real content.
 
@@ -527,13 +535,13 @@ Wellfound uses **Tailwind CSS** — no stable semantic class names. These patter
 
 7. **Login wall on job details and user profiles.** Company overview pages load without login.
    Individual job detail pages, and all `/u/{username}` profiles, hit a login modal immediately.
-   Call `dismiss_wellfound_login_modal()` right after `wait(5)` on these pages.
+   Call `dismiss_wellfound_login_modal()` right after `await wait(5)` on these pages.
 
-8. **Rate limiting.** After ~5-10 rapid page navigations DataDome may harden. Use `wait(3)` between
-   `goto()` calls. If you get a captcha that does not auto-resolve, wait 30-60 seconds.
+8. **Rate limiting.** After ~5-10 rapid page navigations DataDome may harden. Use `await wait(3)` between
+   `await goto()` calls. If you get a captcha that does not auto-resolve, wait 30-60 seconds.
 
-9. **`new_tab()` over `goto()` for the first Wellfound page.** `goto()` in an existing tab
-   may inherit a stale DataDome fingerprint. `new_tab()` gives a clean origin context that
+9. **`await new_tab()` over `await goto()` for the first Wellfound page.** `await goto()` in an existing tab
+   may inherit a stale DataDome fingerprint. `await new_tab()` gives a clean origin context that
    DataDome processes cleanly.
 
 ---
@@ -563,16 +571,16 @@ In a real Chrome browser, both challenges resolve automatically without user int
 import json
 
 # Open Wellfound company page
-new_tab("https://wellfound.com/company/openai")
-wait_for_load()
-wait(5)
+await new_tab("https://wellfound.com/company/openai")
+await wait_for_load()
+await wait(5)
 
 # Verify not blocked
-title = js("document.title")
+title = await js("document.title")
 assert "Just a moment" not in (title or ""), f"Still on challenge page: {title}"
 
 # Extract company overview
-data = js("""
+data = await js("""
 (function() {
   var name = document.querySelector('h1');
   var bodyText = document.body.innerText;

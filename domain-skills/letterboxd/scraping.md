@@ -1,4 +1,12 @@
-# Letterboxd — Film Data Scraping
+# 
+> **Adapted from browser-harness to camoufox-harness (Playwright API)**
+>
+> Original browser-harness code used CDP/sync calls. This has been adapted to use Playwright async API.
+>
+> If you find issues, check `helpers.py` for available functions.
+
+
+Letterboxd — Film Data Scraping
 
 `https://letterboxd.com` — film logging, rating, and review site. Film pages and user profile root pages are publicly accessible via `http_get` (~200–350ms). Most sub-pages (reviews, ratings, user film lists, browse/genre pages) return 403 and require the browser.
 
@@ -39,12 +47,12 @@ def extract_film_data(slug):
     Fetch and parse a Letterboxd film page.
     slug examples: 'the-godfather', 'parasite-2019', 'inception', '2001-a-space-odyssey'
     """
-    html = http_get(f"https://letterboxd.com/film/{slug}/")
+    html = await js('fetch(" + r"f"https://letterboxd.com/film/{slug}/"" + r").then(r=>r.text())
     result = {}
 
     # --- JSON-LD (primary source) ---
     jsonld_raw = re.findall(r'<script type="application/ld\+json">(.*?)</script>', html, re.DOTALL)
-    for block in jsonld_raw:
+    async for block in jsonld_raw:
         # Strip CDATA wrapper that Letterboxd wraps around JSON-LD
         cleaned = re.sub(r'/\*\s*<!\[CDATA\[.*?\*/\s*', '', block, flags=re.DOTALL)
         cleaned = re.sub(r'/\*\s*\]\]>.*?\*/', '', cleaned, flags=re.DOTALL)
@@ -166,7 +174,7 @@ import re, html as htmllib
 from helpers import http_get
 
 def extract_user_profile(username):
-    html = http_get(f"https://letterboxd.com/{username}/")
+    html = await js('fetch(" + r"f"https://letterboxd.com/{username}/"" + r").then(r=>r.text())
 
     # Display name
     dm = re.search(r'class="displayname tooltip"[^>]*><span class="label">([^<]+)</span>', html)
@@ -222,7 +230,7 @@ import re, html as htmllib
 from helpers import http_get
 
 def extract_activity_stream():
-    html = http_get("https://letterboxd.com/films/")
+    html = await js('fetch(" + r""https://letterboxd.com/films/"" + r").then(r=>r.text())
     entries = []
     for owner, obj_id, block in re.findall(
         r'class="production-viewing[^"]*"[^>]*data-owner="([^"]+)"[^>]*data-object-id="([^"]+)"[^>]*>(.*?)</article>',
@@ -250,18 +258,18 @@ def extract_activity_stream():
 
 ## Path 4: Browser for list pages and sub-pages (403 via http_get)
 
-These pages require the browser — use `goto()` + `wait_for_load()` + `wait(2)`:
+These pages require the browser — use `await goto()` + `await wait_for_load()` + `await wait(2)`:
 
 ```python
 from helpers import goto, wait_for_load, wait, js
 import json
 
 # Popular films
-goto("https://letterboxd.com/films/popular/")
-wait_for_load()
-wait(2)
+await goto("https://letterboxd.com/films/popular/")
+await wait_for_load()
+await wait(2)
 
-films = json.loads(js("""
+films = json.loads(await js("""
 (function() {
   var items = Array.from(document.querySelectorAll('li.film-list-entry, li[class*="poster-container"]'));
   return JSON.stringify(items.slice(0, 30).map(function(el) {
@@ -276,11 +284,11 @@ films = json.loads(js("""
 """))
 
 # User watched films list (paginated, 72/page)
-goto("https://letterboxd.com/dave/films/")
-wait_for_load()
-wait(2)
+await goto("https://letterboxd.com/dave/films/")
+await wait_for_load()
+await wait(2)
 
-films = json.loads(js("""
+films = json.loads(await js("""
 (function() {
   var items = Array.from(document.querySelectorAll('li[data-film-id]'));
   return JSON.stringify(items.map(function(el) {
@@ -294,18 +302,18 @@ films = json.loads(js("""
 """))
 
 # User diary entries
-goto("https://letterboxd.com/dave/diary/")
-wait_for_load()
-wait(2)
+await goto("https://letterboxd.com/dave/diary/")
+await wait_for_load()
+await wait(2)
 
 # For paginated browsing, check next page link
-next_page_url = js("""
+next_page_url = await js("""
 (function() {
   var a = document.querySelector('a.next');
   return a ? a.href : null;
 })()
 """)
-# Returns URL for next page or null. Load it with goto(next_page_url).
+# Returns URL for next page or null. Load it with await goto(next_page_url).
 ```
 
 ---

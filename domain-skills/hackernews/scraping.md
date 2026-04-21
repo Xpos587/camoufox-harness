@@ -1,4 +1,12 @@
-# Hacker News — Data Extraction
+# 
+> **Adapted from browser-harness to camoufox-harness (Playwright API)**
+>
+> Original browser-harness code used CDP/sync calls. This has been adapted to use Playwright async API.
+>
+> If you find issues, check `helpers.py` for available functions.
+
+
+Hacker News — Data Extraction
 
 `https://news.ycombinator.com` — YCombinator's link aggregator. Three access paths tested: `http_get` DOM scraping, Algolia search API, and the official HN Firebase API. All work without a browser.
 
@@ -23,7 +31,7 @@ The front page HTML is ~34KB. Story order matches Firebase `/topstories.json` ex
 ```python
 import re, html as htmllib
 
-page = http_get("https://news.ycombinator.com")
+page = await js('fetch(" + r""https://news.ycombinator.com"" + r").then(r=>r.text())
 
 # Extract all 30 story IDs (in rank order)
 story_ids = re.findall(r'<tr class="athing submission" id="(\d+)">', page)
@@ -89,16 +97,16 @@ No rate limiting observed. Returns up to 1000 hits per query (`hitsPerPage` max 
 import json
 
 # Keyword search — sorted by relevance
-data = json.loads(http_get(
+data = json.loads(await js('fetch(" + r"
     "https://hn.algolia.com/api/v1/search"
     "?query=llm&tags=story&hitsPerPage=20"
-))
+" + r").then(r=>r.text()))
 
 # Date-sorted (most recent first)
-data = json.loads(http_get(
+data = json.loads(await js('fetch(" + r"
     "https://hn.algolia.com/api/v1/search_by_date"
     "?tags=story&hitsPerPage=20"
-))
+" + r").then(r=>r.text()))
 
 # Paginate: add &page=N (0-indexed), up to data['nbPages']-1
 ```
@@ -158,9 +166,9 @@ Tags are AND by default, OR with parentheses:
 ```python
 import json
 
-thread = json.loads(http_get(
+thread = json.loads(await js('fetch(" + r"
     "https://hn.algolia.com/api/v1/items/47806725"
-))
+" + r").then(r=>r.text()))
 # thread['children'] = list of top-level comment objects
 # Each comment: author, text (HTML), created_at, children (nested replies)
 # Recursively walk children for full thread
@@ -186,28 +194,28 @@ Clean JSON, no scraping. Use for fetching specific items or building live feeds.
 import json
 
 # Ranked story ID lists (no metadata — just IDs)
-top   = json.loads(http_get("https://hacker-news.firebaseio.com/v0/topstories.json"))  # 500 IDs
-new   = json.loads(http_get("https://hacker-news.firebaseio.com/v0/newstories.json"))  # 500 IDs
-best  = json.loads(http_get("https://hacker-news.firebaseio.com/v0/beststories.json")) # 200 IDs
-ask   = json.loads(http_get("https://hacker-news.firebaseio.com/v0/askstories.json"))  # ~32 IDs
-show  = json.loads(http_get("https://hacker-news.firebaseio.com/v0/showstories.json")) # ~119 IDs
-jobs  = json.loads(http_get("https://hacker-news.firebaseio.com/v0/jobstories.json"))  # ~31 IDs
+top   = json.loads(await js('fetch(" + r""https://hacker-news.firebaseio.com/v0/topstories.json"" + r").then(r=>r.text()))  # 500 IDs
+new   = json.loads(await js('fetch(" + r""https://hacker-news.firebaseio.com/v0/newstories.json"" + r").then(r=>r.text()))  # 500 IDs
+best  = json.loads(await js('fetch(" + r""https://hacker-news.firebaseio.com/v0/beststories.json"" + r").then(r=>r.text())) # 200 IDs
+ask   = json.loads(await js('fetch(" + r""https://hacker-news.firebaseio.com/v0/askstories.json"" + r").then(r=>r.text()))  # ~32 IDs
+show  = json.loads(await js('fetch(" + r""https://hacker-news.firebaseio.com/v0/showstories.json"" + r").then(r=>r.text())) # ~119 IDs
+jobs  = json.loads(await js('fetch(" + r""https://hacker-news.firebaseio.com/v0/jobstories.json"" + r").then(r=>r.text()))  # ~31 IDs
 
 # Fetch a single item
-item = json.loads(http_get(
+item = json.loads(await js('fetch(" + r"
     "https://hacker-news.firebaseio.com/v0/item/47806725.json"
-))
+" + r").then(r=>r.text()))
 # Fields: id, type, by, title, url, score, descendants (total comment count),
 #         time (unix ts), kids (list of top-level comment IDs), text (self-post body)
 
 # Fetch a user profile
-user = json.loads(http_get(
+user = json.loads(await js('fetch(" + r"
     "https://hacker-news.firebaseio.com/v0/user/pg.json"
-))
+" + r").then(r=>r.text()))
 # Fields: id, karma, created (unix ts), about (HTML), submitted (list of item IDs)
 
 # Highest current item ID (useful for polling new items)
-maxid = json.loads(http_get("https://hacker-news.firebaseio.com/v0/maxitem.json"))
+maxid = json.loads(await js('fetch(" + r""https://hacker-news.firebaseio.com/v0/maxitem.json"" + r").then(r=>r.text()))
 ```
 
 **Firebase vs Algolia tradeoff:**
@@ -224,7 +232,7 @@ For a large thread, the item page HTML (~1MB for 659 comments) loads ALL comment
 ```python
 import re, html as htmllib
 
-page = http_get("https://news.ycombinator.com/item?id=47806725")
+page = await js('fetch(" + r""https://news.ycombinator.com/item?id=47806725"" + r").then(r=>r.text())
 
 # Count all comment IDs
 comment_ids = re.findall(r'<tr class="athing comtr" id="(\d+)">', page)
@@ -240,4 +248,4 @@ For structured comment access prefer Algolia items API — it returns a proper n
 
 ## Do NOT use a browser for HN
 
-All data is in plain HTML or JSON APIs. `goto()` + `wait_for_load()` takes 3–8 seconds; `http_get` takes 170–400ms. The JS `querySelectorAll` approach works (tested, returns correct data) but is 20–50x slower with no benefit.
+All data is in plain HTML or JSON APIs. `await goto()` + `await wait_for_load()` takes 3–8 seconds; `http_get` takes 170–400ms. The JS `querySelectorAll` approach works (tested, returns correct data) but is 20–50x slower with no benefit.

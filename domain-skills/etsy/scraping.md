@@ -1,4 +1,12 @@
-# Etsy — Scraping & Data Extraction
+# 
+> **Adapted from browser-harness to camoufox-harness (Playwright API)**
+>
+> Original browser-harness code used CDP/sync calls. This has been adapted to use Playwright async API.
+>
+> If you find issues, check `helpers.py` for available functions.
+
+
+Etsy — Scraping & Data Extraction
 
 Field-tested against `www.etsy.com` on 2026-04-18 using `http_get` (no browser) and direct `urllib` probes.
 
@@ -76,7 +84,7 @@ Body (816 bytes — a JavaScript challenge, not a hard block):
 
 ```python
 from helpers import http_get
-text = http_get("https://www.etsy.com/robots.txt")
+text = await js('fetch(" + r""https://www.etsy.com/robots.txt"" + r").then(r=>r.text())
 # Returns 51 KB plain-text file — no DataDome
 ```
 
@@ -96,7 +104,7 @@ def etsy_api(path, **params):
     from urllib.parse import urlencode
     qs = urlencode(params)
     url = f"https://openapi.etsy.com/v3/application/{path}?{qs}"
-    data = http_get(url, headers={"x-api-key": API_KEY})
+    data = await js('fetch(" + r"url, headers={"x-api-key": API_KEY}" + r").then(r=>r.text())
     return json.loads(data)
 
 # Search listings
@@ -163,10 +171,10 @@ Since http_get is blocked, all HTML scraping requires the Chrome browser via CDP
 ```python
 from helpers import goto, wait_for_load, wait, js, new_tab
 
-# Always use new_tab() for the first Etsy navigation in a session
-tid = new_tab("https://www.etsy.com/search?q=handmade+candle&explicit=1")
-wait_for_load()
-wait(3)  # Etsy React SPA needs extra time after readyState=complete
+# Always use await new_tab() for the first Etsy navigation in a session
+tid = await new_tab("https://www.etsy.com/search?q=handmade+candle&explicit=1")
+await wait_for_load()
+await wait(3)  # Etsy React SPA needs extra time after readyState=complete
 ```
 
 ### Search URL construction
@@ -195,7 +203,7 @@ Parameters:
 Etsy renders results as a React SPA. The listing cards use data attributes and consistent class patterns:
 
 ```python
-results = js("""
+results = await js("""
   Array.from(document.querySelectorAll('[data-listing-id]')).map(el => ({
     listing_id: el.getAttribute('data-listing-id'),
     title: el.querySelector('h3, [class*="listing-link"]')?.innerText?.trim()
@@ -215,7 +223,7 @@ results = js("""
 Etsy's SSR HTML embeds a `<script type="application/ld+json">` with an `ItemList` on search pages. In the browser, extract it via:
 
 ```python
-ld_json_str = js("""
+ld_json_str = await js("""
   Array.from(document.querySelectorAll('script[type="application/ld+json"]'))
     .map(s => { try { return JSON.parse(s.textContent); } catch(e) { return null; } })
     .filter(d => d && d['@type'] === 'ItemList')[0]
@@ -226,7 +234,7 @@ if ld_json_str:
     # ld_json_str.itemListElement is a list of:
     # { '@type': 'ListItem', 'position': 1,
     #   'url': 'https://www.etsy.com/listing/...', 'name': 'Handmade Soy Candle' }
-    for item in ld_json_str.get('itemListElement', []):
+    async for item in ld_json_str.get('itemListElement', []):
         print(item['position'], item['url'], item.get('name'))
 ```
 
@@ -240,12 +248,12 @@ Expected output (ItemList typically has 48 items per search page):
 ### Listing detail page extraction (browser)
 
 ```python
-goto("https://www.etsy.com/listing/1234567890/product-slug")
-wait_for_load()
-wait(2)
+await goto("https://www.etsy.com/listing/1234567890/product-slug")
+await wait_for_load()
+await wait(2)
 
 # JSON-LD Product schema (most reliable)
-product = js("""
+product = await js("""
   (function() {
     var scripts = document.querySelectorAll('script[type="application/ld+json"]');
     for (var s of scripts) {
@@ -274,7 +282,7 @@ product = js("""
 **Fallback DOM selectors** (when JSON-LD is absent or incomplete):
 
 ```python
-detail = js("""
+detail = await js("""
   ({
     title:   document.querySelector('h1[data-buy-box-listing-title]')?.innerText?.trim()
            || document.querySelector('h1.wt-text-body-01')?.innerText?.trim(),
@@ -292,12 +300,12 @@ detail = js("""
 ### Shop/seller page extraction (browser)
 
 ```python
-goto("https://www.etsy.com/shop/ShopName")
-wait_for_load()
-wait(2)
+await goto("https://www.etsy.com/shop/ShopName")
+await wait_for_load()
+await wait(2)
 
 # JSON-LD on shop pages (type varies: LocalBusiness, Store, or Organization)
-shop_ld = js("""
+shop_ld = await js("""
   (function() {
     for (var s of document.querySelectorAll('script[type="application/ld+json"]')) {
       try {
@@ -310,7 +318,7 @@ shop_ld = js("""
 """)
 
 # DOM extraction for shop stats
-shop_info = js("""
+shop_info = await js("""
   ({
     name:       document.querySelector('[class*="shop-name"]')?.innerText?.trim(),
     tagline:    document.querySelector('[class*="shop-tagline"]')?.innerText?.trim(),
@@ -327,30 +335,30 @@ Pagination for shop listings: Etsy loads more listings via infinite scroll or a 
 
 ```python
 # Check for pagination or load-more
-load_more = js("document.querySelector('[data-wt-shop-listings-load-more], button[class*=\"load-more\"]')?.href")
+load_more = await js("document.querySelector('[data-wt-shop-listings-load-more], button[class*=\"load-more\"]')?.href")
 if load_more:
-    goto(load_more)
-    wait_for_load()
-    wait(2)
+    await goto(load_more)
+    await wait_for_load()
+    await wait(2)
 # Or: scroll to bottom to trigger infinite scroll
-js("window.scrollTo(0, document.body.scrollHeight)")
-wait(2)
+await js("window.scrollTo(0, document.body.scrollHeight)")
+await wait(2)
 ```
 
 ### Pagination (search results)
 
 ```python
 # Etsy uses ?page=N — 48 results per page (standard), up to ~250 pages
-next_url = js("document.querySelector('a[data-wt-search-page-next], .wt-action-group a[rel=\"next\"]')?.href")
+next_url = await js("document.querySelector('a[data-wt-search-page-next], .wt-action-group a[rel=\"next\"]')?.href")
 if next_url:
-    goto(next_url)
-    wait_for_load()
-    wait(2)
+    await goto(next_url)
+    await wait_for_load()
+    await wait(2)
 
 # Or construct directly:
-goto(f"https://www.etsy.com/search?q=handmade+candle&explicit=1&page={page_num}")
-wait_for_load()
-wait(2)
+await goto(f"https://www.etsy.com/search?q=handmade+candle&explicit=1&page={page_num}")
+await wait_for_load()
+await wait(2)
 ```
 
 ---
@@ -467,7 +475,7 @@ def etsy_search(keywords, max_results=200):
         url = (f"https://openapi.etsy.com/v3/application/listings/active"
                f"?keywords={keywords}&limit={limit}&offset={offset}"
                f"&sort_on=score&sort_order=desc")
-        data = json.loads(http_get(url, headers={"x-api-key": API_KEY}))
+        data = json.loads(await js('fetch(" + r"url, headers={"x-api-key": API_KEY}" + r").then(r=>r.text()))
         batch = data.get("results", [])
         if not batch:
             break

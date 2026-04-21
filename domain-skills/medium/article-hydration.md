@@ -1,4 +1,12 @@
-# Medium — Article Body via DOM
+# 
+> **Adapted from browser-harness to camoufox-harness (Playwright API)**
+>
+> Original browser-harness code used CDP/sync calls. This has been adapted to use Playwright async API.
+>
+> If you find issues, check `helpers.py` for available functions.
+
+
+Medium — Article Body via DOM
 
 Extract a Medium article's body as clean markdown using the logged-in browser. Use this when API paths in `scraping.md` are blocked or truncated:
 
@@ -34,11 +42,11 @@ Safe pattern: take the extracted markdown, then drop leading paragraphs that are
 
 ````bash
 browser-harness <<'PY'
-new_tab("https://medium.com/@user/slug-abc123")
-wait_for_load()
-wait(2.0)  # Medium hydrates more UI after readyState=complete
+await new_tab("https://medium.com/@user/slug-abc123")
+await wait_for_load()
+await wait(2.0)  # Medium hydrates more UI after readyState=complete
 
-md = js(r"""
+md = await js(r"""
 (()=>{
   const article = document.querySelector('article');
   if(!article) return null;
@@ -93,13 +101,13 @@ The `seen` set avoids double-emitting when an `<li>` matches the block query ins
 
 ## Waits
 
-- `wait_for_load()` is necessary but not sufficient — Medium continues to hydrate author-card and clap widgets after `readyState=complete`. An additional `wait(2.0)` avoids cases where the article outer frame exists but the first few paragraphs are still skeleton `<div>`s.
+- `await wait_for_load()` is necessary but not sufficient — Medium continues to hydrate author-card and clap widgets after `readyState=complete`. An additional `await wait(2.0)` avoids cases where the article outer frame exists but the first few paragraphs are still skeleton `<div>`s.
 - For member-only articles, if `<article>` renders but text length is suspiciously short (<500 chars), the paywall modal intercepted. Confirm the tab is on your logged-in profile and retry.
 
 ## Paywall / login detection
 
 ```python
-state = js("""
+state = await js("""
 (()=>{
   const art = document.querySelector('article');
   const len = art ? art.innerText.length : 0;
@@ -117,4 +125,4 @@ If `hasPaywall` is true or `len < 500`, fall back to `scraping.md` API paths (th
 - **Don't rely on CSS class names.** Medium's class names are hashed (`pw-post-body-paragraph`, etc.) and rotate; select by tag instead.
 - **`<figure>` caption text is often also repeated as `<img alt>`.** Prefer `alt`, fall back to `figcaption`, so you don't emit both.
 - **The article ends before the "About the Author" card sometimes, sometimes not.** The walker captures both, which is fine for archival. If you need body-only, cut at the last `h2`/`h3` before a `<hr>`-equivalent divider, or trim by known footer strings (`Follow`, `More from`, `Written by`).
-- **Tab marker.** `new_tab()` prepends 🟢 to the title. Don't include `document.title` in the emitted markdown — use the article's `<h1>` instead.
+- **Tab marker.** `await new_tab()` prepends 🟢 to the title. Don't include `document.title` in the emitted markdown — use the article's `<h1>` instead.

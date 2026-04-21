@@ -1,4 +1,12 @@
-# Spotify — Data Extraction
+# 
+> **Adapted from browser-harness to camoufox-harness (Playwright API)**
+>
+> Original browser-harness code used CDP/sync calls. This has been adapted to use Playwright async API.
+>
+> If you find issues, check `helpers.py` for available functions.
+
+
+Spotify — Data Extraction
 
 Field-tested against open.spotify.com on 2026-04-18.
 No authentication required for any approach documented here.
@@ -23,7 +31,7 @@ def spotify_oembed(resource_type, resource_id):
     """
     resource_url = f"https://open.spotify.com/{resource_type}/{resource_id}"
     url = f"https://open.spotify.com/oembed?url={resource_url}"
-    data = json.loads(http_get(url))
+    data = json.loads(await js('fetch(" + r"url" + r").then(r=>r.text()))
     return data
 
 # Example: track
@@ -72,7 +80,7 @@ track_ids = [
 def fetch_oembed(tid):
     url = f"https://open.spotify.com/oembed?url=https://open.spotify.com/track/{tid}"
     try:
-        return json.loads(http_get(url))
+        return json.loads(await js('fetch(" + r"url" + r").then(r=>r.text()))
     except Exception as e:
         return {"error": str(e), "id": tid}
 
@@ -95,7 +103,7 @@ import json, re
 
 def scrape_track(track_id):
     url = f"https://open.spotify.com/track/{track_id}"
-    html = http_get(url)
+    html = await js('fetch(" + r"url" + r").then(r=>r.text())
 
     # ---- JSON-LD (most structured) ----
     ld_raw = re.search(r'<script type="application/ld\+json"[^>]*>(.*?)</script>', html, re.DOTALL)
@@ -103,7 +111,7 @@ def scrape_track(track_id):
 
     # ---- Open Graph / music: meta tags ----
     metas = {}
-    for m in re.finditer(r'<meta\s+(?:property|name)="([^"]+)"\s+content="([^"]*)"', html):
+    async for m in re.finditer(r'<meta\s+(?:property|name)="([^"]+)"\s+content="([^"]*)"', html):
         key, val = m.group(1), m.group(2)
         if key not in metas:
             metas[key] = val
@@ -149,13 +157,13 @@ def scrape_track(track_id):
 ```python
 def scrape_artist(artist_id):
     url = f"https://open.spotify.com/artist/{artist_id}"
-    html = http_get(url)
+    html = await js('fetch(" + r"url" + r").then(r=>r.text())
 
     ld_raw = re.search(r'<script type="application/ld\+json"[^>]*>(.*?)</script>', html, re.DOTALL)
     ld = json.loads(ld_raw.group(1)) if ld_raw else {}
 
     metas = {}
-    for m in re.finditer(r'<meta\s+(?:property|name)="([^"]+)"\s+content="([^"]*)"', html):
+    async for m in re.finditer(r'<meta\s+(?:property|name)="([^"]+)"\s+content="([^"]*)"', html):
         if m.group(1) not in metas:
             metas[m.group(1)] = m.group(2)
 
@@ -191,7 +199,7 @@ def scrape_embed(resource_type, resource_id):
     Returns the entity dict from __NEXT_DATA__.
     """
     url = f"https://open.spotify.com/embed/{resource_type}/{resource_id}"
-    html = http_get(url)
+    html = await js('fetch(" + r"url" + r").then(r=>r.text())
     m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', html, re.DOTALL)
     data = json.loads(m.group(1))
     return data['props']['pageProps']['state']['data']['entity']
@@ -251,7 +259,7 @@ The embed page SSR data includes a short-lived anonymous Spotify Web Player acce
 def get_embed_token(resource_type="track", resource_id="4PTG3Z6ehGkBFwjybzWkR8"):
     """Extract the anonymous access token from an embed page."""
     url = f"https://open.spotify.com/embed/{resource_type}/{resource_id}"
-    html = http_get(url)
+    html = await js('fetch(" + r"url" + r").then(r=>r.text())
     m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', html, re.DOTALL)
     data = json.loads(m.group(1))
     session = data['props']['pageProps']['state']['settings']['session']
@@ -290,13 +298,13 @@ The following are **not accessible** via http_get and require the CDP browser:
 If browser access is needed for search:
 
 ```python
-goto("https://open.spotify.com/search")
-wait_for_load()
-wait(2)
+await goto("https://open.spotify.com/search")
+await wait_for_load()
+await wait(2)
 # Type into the search box
-js("document.querySelector('input[data-testid=\"search-input\"]').focus()")
-type_text("never gonna give you up")
-wait(1)
+await js("document.querySelector('input[data-testid=\"search-input\"]').focus()")
+await type_text("never gonna give you up")
+await wait(1)
 # Results appear in [data-testid="top-results-card"] or similar dynamic selectors
 ```
 

@@ -1,4 +1,12 @@
-# CentileBrain — Generate Normative Deviation Values
+# 
+> **Adapted from browser-harness to camoufox-harness (Playwright API)**
+>
+> Original browser-harness code used CDP/sync calls. This has been adapted to use Playwright async API.
+>
+> If you find issues, check `helpers.py` for available functions.
+
+
+CentileBrain — Generate Normative Deviation Values
 
 URL: `https://centilebrain.org/#/model`
 
@@ -15,7 +23,7 @@ each a distinct Shiny app. Login/account not required.
   The top-page buttons and toggles are not forms — they just replace
   the iframe `src`.
 - The upload form, compute button, and download link all live **inside the iframe**.
-  `iframe_target("shinyapps.io/SV-MALE")` (etc.) returns the session to use.
+  `await iframe_target("shinyapps.io/SV-MALE")` (etc.) returns the session to use.
 - Requires `upload_file(..., target_id=...)` — the iframe-aware upload helper.
 
 ## Form elements (inside the iframe)
@@ -35,9 +43,9 @@ each a distinct Shiny app. Login/account not required.
 
 ## Traps
 
-- **Iframe target_id goes stale across modality swaps.** After clicking `CORTICAL THICKNESS` or `SURFACE AREA`, re-call `iframe_target("shinyapps.io/CT-MALE")` — the old id from SV-MALE will not work even though `Target.getTargets` may still list it briefly. Add a 2-3 s sleep after the modality-swap click before re-resolving.
-- **Sex toggles are MUI switches, not radio buttons.** They are `input[type=checkbox]` with `name=female` / `name=male`. Clicking one does not automatically uncheck the other visibly, but the iframe src changes based on which is `checked`. Easiest: `js("document.querySelector('input[name=male]').click()")`.
-- **Top-level buttons scroll off-screen after first interaction.** The modality buttons are at `y ≈ 226`, but after scrolling/iframe expansion they report `y < 0`. Use `js("window.scrollTo(0, 0)")` then click via JS by text (`Array.from(document.querySelectorAll('button')).find(b => b.innerText.trim() === 'CORTICAL THICKNESS').click()`) instead of fixed coordinates.
+- **Iframe target_id goes stale across modality swaps.** After clicking `CORTICAL THICKNESS` or `SURFACE AREA`, re-call `await iframe_target("shinyapps.io/CT-MALE")` — the old id from SV-MALE will not work even though `Target.getTargets` may still list it briefly. Add a 2-3 s sleep after the modality-swap click before re-resolving.
+- **Sex toggles are MUI switches, not radio buttons.** They are `input[type=checkbox]` with `name=female` / `name=male`. Clicking one does not automatically uncheck the other visibly, but the iframe src changes based on which is `checked`. Easiest: `await js("document.querySelector('input[name=male]').await click()")`.
+- **Top-level buttons scroll off-screen after first interaction.** The modality buttons are at `y ≈ 226`, but after scrolling/iframe expansion they report `y < 0`. Use `await js("window.scrollTo(0, 0)")` then click via JS by text (`Array.from(document.querySelectorAll('button')).find(b => b.innerText.trim() === 'CORTICAL THICKNESS').await click()`) instead of fixed coordinates.
 
 ## End-to-end example
 
@@ -46,40 +54,40 @@ import time, os
 
 DL = "/tmp/centilebrain"
 os.makedirs(DL, exist_ok=True)
-cdp("Browser.setDownloadBehavior", behavior="allow", downloadPath=DL, eventsEnabled=True)
+# TODO: CDP code removed - needs Playwright adaptation
 
-new_tab("https://centilebrain.org/#/model")
-wait_for_load()
+await new_tab("https://centilebrain.org/#/model")
+await wait_for_load()
 time.sleep(2)
 
 # Pick modality + sex (SV + male shown; repeat for CT and SA as needed)
-js("""Array.from(document.querySelectorAll('button'))
-       .find(b => b.innerText.trim() === 'SUBCORTICAL VOLUME').click()""")
+await js("""Array.from(document.querySelectorAll('button'))
+       .find(b => b.innerText.trim() === 'SUBCORTICAL VOLUME').await click()""")
 time.sleep(1)
-js("document.querySelector('input[name=male]').click()")
+await js("document.querySelector('input[name=male]').await click()")
 time.sleep(2)
 
-t = iframe_target("shinyapps.io/SV-MALE")
+t = await iframe_target("shinyapps.io/SV-MALE")
 upload_file("#file1", "/abs/path/JMT_subcortical_volume.xlsx", target_id=t)
 time.sleep(3)
 
-js("""const e=document.querySelector('#email');
+await js("""const e=document.querySelector('#email');
       e.value='user@example.com';
       e.dispatchEvent(new Event('input',{bubbles:true}));""", target_id=t)
 
-js("document.querySelector('#confirm').click()", target_id=t)
-for _ in range(40):
+await js("document.querySelector('#confirm').await click()", target_id=t)
+async for _ in range(40):
     time.sleep(3)
-    if "Computation complete" in js("document.body.innerText", target_id=t):
+    if "Computation complete" in await js("document.body.innerText", target_id=t):
         break
 
 before = set(os.listdir(DL))
-js("document.querySelector('#downloadData1').click()", target_id=t)
-for _ in range(30):
+await js("document.querySelector('#downloadData1').await click()", target_id=t)
+async for _ in range(30):
     time.sleep(2)
     after = set(os.listdir(DL))
     new = after - before
-    if new and not any(f.endswith(".crdownload") for f in after):
+    if new and not any(f.endswith(".crdownload") async for f in after):
         print("downloaded:", new)
         break
 ```

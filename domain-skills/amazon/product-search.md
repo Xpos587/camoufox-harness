@@ -1,4 +1,12 @@
-# Amazon — Product Search & Data Extraction
+# 
+> **Adapted from browser-harness to camoufox-harness (Playwright API)**
+>
+> Original browser-harness code used CDP/sync calls. This has been adapted to use Playwright async API.
+>
+> If you find issues, check `helpers.py` for available functions.
+
+
+Amazon — Product Search & Data Extraction
 
 Field-tested against amazon.com on 2025-04-18 using a logged-in Chrome session.
 No CAPTCHA or bot detection was triggered during any test run.
@@ -7,47 +15,47 @@ No CAPTCHA or bot detection was triggered during any test run.
 
 ### Direct search URL (fastest, always use this)
 ```python
-goto("https://www.amazon.com/s?k=mechanical+keyboard")
-wait_for_load()
-wait(2)  # dynamic content needs ~2s after readyState=complete
+await goto("https://www.amazon.com/s?k=mechanical+keyboard")
+await wait_for_load()
+await wait(2)  # dynamic content needs ~2s after readyState=complete
 ```
 
 ### Search box typing (use when you need category filtering)
 ```python
-goto("https://www.amazon.com")
-wait_for_load()
-wait(1)
-js("document.querySelector('#twotabsearchtextbox').focus()")
-js("document.querySelector('#twotabsearchtextbox').click()")
-wait(0.3)
-type_text("wireless mouse")
-wait(0.3)
-press_key("Enter")
-wait_for_load()
-wait(2)
+await goto("https://www.amazon.com")
+await wait_for_load()
+await wait(1)
+await js("document.querySelector('#twotabsearchtextbox').focus()")
+await js("document.querySelector('#twotabsearchtextbox').await click()")
+await wait(0.3)
+await type_text("wireless mouse")
+await wait(0.3)
+await press_key("Enter")
+await wait_for_load()
+await wait(2)
 ```
 
 ### Direct product page
 ```python
 # URL pattern: /dp/{ASIN}  or  /dp/{ASIN}?th=1 (Amazon may redirect to add ?th=1)
-goto("https://www.amazon.com/dp/B08Z6X4NK3")
-wait_for_load()
-wait(2)
+await goto("https://www.amazon.com/dp/B08Z6X4NK3")
+await wait_for_load()
+await wait(2)
 ```
 
 ## Session Gotcha
 
-**Always use `new_tab()` when opening Amazon for the first time in a harness session.**
-`goto()` can silently fail to navigate if the current tab resists the navigation
+**Always use `await new_tab()` when opening Amazon for the first time in a harness session.**
+`await goto()` can silently fail to navigate if the current tab resists the navigation
 (observed when the daemon attached to a different real tab). The safe pattern:
 
 ```python
-tid = new_tab("https://www.amazon.com/s?k=mechanical+keyboard")
-wait_for_load()
-wait(2)
+tid = await new_tab("https://www.amazon.com/s?k=mechanical+keyboard")
+await wait_for_load()
+await wait(2)
 ```
 
-After that, `goto()` works fine within the same Amazon session.
+After that, `await goto()` works fine within the same Amazon session.
 
 ## Search Results Extraction
 
@@ -56,7 +64,7 @@ After that, `goto()` works fine within the same Amazon session.
 
 ### Full extraction (field-tested)
 ```python
-results = js("""
+results = await js("""
   Array.from(document.querySelectorAll('[data-component-type="s-search-result"]')).map(el => ({
     asin: el.getAttribute('data-asin'),
     title: el.querySelector('h2 span')?.innerText?.trim(),
@@ -84,7 +92,7 @@ results = js("""
 
 ### Confirmed selectors (field-tested on B08Z6X4NK3)
 ```python
-detail = js("""
+detail = await js("""
   ({
     title: document.querySelector('#productTitle')?.innerText?.trim(),
     price: (function() {
@@ -120,11 +128,11 @@ e.g. `https://www.amazon.com/Best-Sellers-Electronics/zgbs/electronics/`
 `.zg-item-immersion` **does not exist** — Amazon migrated to CSS modules. Use `[data-asin]` anchored on `[id="gridItemRoot"]`:
 
 ```python
-goto("https://www.amazon.com/Best-Sellers-Electronics/zgbs/electronics/")
-wait_for_load()
-wait(2)
+await goto("https://www.amazon.com/Best-Sellers-Electronics/zgbs/electronics/")
+await wait_for_load()
+await wait(2)
 
-items = js("""
+items = await js("""
   Array.from(document.querySelectorAll('[data-asin]')).map(el => {
     var container = el.closest('[id="gridItemRoot"]') || el;
     return {
@@ -144,20 +152,20 @@ Note: Title comes from the product image `alt` attribute — the text title elem
 
 ```python
 # Get next page URL directly
-next_url = js("document.querySelector('.s-pagination-next')?.href")
+next_url = await js("document.querySelector('.s-pagination-next')?.href")
 if next_url:
-    goto(next_url)
-    wait_for_load()
-    wait(2)
+    await goto(next_url)
+    await wait_for_load()
+    await wait(2)
 
 # Or construct by page number
-goto("https://www.amazon.com/s?k=wireless+mouse&page=2")
+await goto("https://www.amazon.com/s?k=wireless+mouse&page=2")
 ```
 
 ## Result Count
 
 ```python
-count_text = js("document.querySelector('[data-component-type=\"s-result-info-bar\"] h1')?.innerText?.trim()")
+count_text = await js("document.querySelector('[data-component-type=\"s-result-info-bar\"] h1')?.innerText?.trim()")
 # Returns e.g.: '1-16 of over 40,000 results for "wireless mouse"\nSort by:\n...'
 # Extract just the count: count_text.split('\n')[0]
 ```
@@ -168,8 +176,8 @@ No CAPTCHA was encountered during testing with a logged-in Chrome session. To de
 
 ```python
 def check_captcha():
-    text = js("document.body.innerText.slice(0,500)") or ""
-    url  = page_info()["url"]
+    text = await js("document.body.innerText.slice(0,500)") or ""
+    url  = await page_info()["url"]
     return (
         "captcha" in text.lower()
         or "enter the characters" in text.lower()
@@ -186,7 +194,7 @@ Amazon may serve a CAPTCHA on fresh/anonymous sessions. Using the browser's exis
 
 ## Gotchas
 
-- **`goto()` silent failure**: On first visit, use `new_tab(url)` instead. After the tab is on Amazon, `goto()` works.
+- **`await goto()` silent failure**: On first visit, use `await new_tab(url)` instead. After the tab is on Amazon, `await goto()` works.
 - **`.zg-item-immersion` is gone**: Best Sellers page uses CSS module classes (obfuscated). Use `[data-asin]` + `img[alt]` for title.
 - **`.a-size-base.s-underline-text` is unreliable for review count**: On sponsored results it shows unrelated text (e.g. "Xbox"). Use `[aria-label*="ratings"]` instead.
 - **`#priceblock_ourprice` is legacy**: Returns `null` on modern pages. Construct from `.a-price-whole` + `.a-price-fraction`.
@@ -195,4 +203,4 @@ Amazon may serve a CAPTCHA on fresh/anonymous sessions. Using the browser's exis
 - **Price split DOM**: `.a-price-whole` innerText includes a trailing `\n.` — strip it: `.replace(/[\n.]/g,'')`.
 - **ASIN from URL**: Use `/dp/([A-Z0-9]{10})/` regex on the product URL. `data-asin` on search results is always the canonical ASIN.
 - **`?th=1` redirect**: Amazon appends `?th=1` (and sometimes `?psc=1`) to product URLs after redirect. This is normal — `input[name="ASIN"]` always has the clean ASIN.
-- **Wait 2s after `wait_for_load()`**: Amazon search results load the listing cards asynchronously. `readyState=complete` fires before cards render. A hard 2s wait is required.
+- **Wait 2s after `await wait_for_load()`**: Amazon search results load the listing cards asynchronously. `readyState=complete` fires before cards render. A hard 2s wait is required.

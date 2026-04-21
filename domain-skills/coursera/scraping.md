@@ -1,4 +1,12 @@
-# Coursera — Course & Catalog Data Extraction
+# 
+> **Adapted from browser-harness to camoufox-harness (Playwright API)**
+>
+> Original browser-harness code used CDP/sync calls. This has been adapted to use Playwright async API.
+>
+> If you find issues, check `helpers.py` for available functions.
+
+
+Coursera — Course & Catalog Data Extraction
 
 Field-tested against coursera.org and api.coursera.org on 2026-04-18.
 No authentication required for the public catalog API.
@@ -21,12 +29,12 @@ The default list query (`q=list` implied) returns ALL courses in Coursera's cata
 from helpers import http_get
 import json
 
-resp = http_get(
+resp = await js('fetch(" + r"
     "https://api.coursera.org/api/courses.v1"
     "?fields=name,slug,description,primaryLanguages,workload,"
     "partnerIds,courseType,instructorIds,domainTypes,photoUrl,certificates"
     "&limit=100&start=0"
-)
+" + r").then(r=>r.text())
 data = json.loads(resp)
 courses = data["elements"]   # list of dicts
 next_start = data["paging"].get("next")   # e.g. "100", None when exhausted
@@ -84,7 +92,7 @@ def iter_all_courses(fields=None, page_size=100):
             f"https://api.coursera.org/api/courses.v1"
             f"?fields={base_fields}&limit={page_size}&start={start}"
         )
-        data = json.loads(http_get(url))
+        data = json.loads(await js('fetch(" + r"url" + r").then(r=>r.text()))
         yield from data["elements"]
         nxt = data["paging"].get("next")
         if nxt is None:
@@ -103,10 +111,10 @@ def iter_all_courses(fields=None, page_size=100):
 422 partners (universities, companies) as of test date.
 
 ```python
-resp = http_get(
+resp = await js('fetch(" + r"
     "https://api.coursera.org/api/partners.v1"
     "?fields=name,squareLogo,description,shortName&limit=50&start=0"
-)
+" + r").then(r=>r.text())
 data = json.loads(resp)
 partners = data["elements"]
 # paging.next and paging.total follow same structure as courses
@@ -127,10 +135,10 @@ partners = data["elements"]
 ### Partner by ID (with courseIds)
 
 ```python
-resp = http_get(
+resp = await js('fetch(" + r"
     "https://api.coursera.org/api/partners.v1"
     "?ids=6&fields=name,squareLogo,description,shortName,courseIds"
-)
+" + r").then(r=>r.text())
 data = json.loads(resp)
 partner = data["elements"][0]
 # partner["courseIds"] is a list of course ID strings (150+ for large universities)
@@ -141,10 +149,10 @@ partner = data["elements"][0]
 ## 3. Specializations API (http_get — works)
 
 ```python
-resp = http_get(
+resp = await js('fetch(" + r"
     "https://api.coursera.org/api/onDemandSpecializations.v1"
     "?fields=name,slug,description,partnerIds,courseIds,tagline&limit=100&start=0"
-)
+" + r").then(r=>r.text())
 data = json.loads(resp)
 specs = data["elements"]
 ```
@@ -174,10 +182,10 @@ returns many empty records (empty name/bio).
 
 ```python
 # Lookup specific instructors by ID
-resp = http_get(
+resp = await js('fetch(" + r"
     "https://api.coursera.org/api/instructors.v1"
     "?ids=226710&fields=fullName,bio,department,title,photo"
-)
+" + r").then(r=>r.text())
 data = json.loads(resp)
 instructor = data["elements"][0]
 ```
@@ -203,10 +211,10 @@ Fetch multiple courses (or partners/instructors) in one request by passing a com
 
 ```python
 ids = ",".join(["69Bku0KoEeWZtA4u62x6lQ", "hOzhxVNuEfCW8Q55q1kSNQ", "0HiU7Oe4EeWTAQ4yevf_oQ"])
-resp = http_get(
+resp = await js('fetch(" + r"
     f"https://api.coursera.org/api/courses.v1"
     f"?ids={ids}&fields=name,slug,description,primaryLanguages,workload,partnerIds"
-)
+" + r").then(r=>r.text())
 data = json.loads(resp)
 # data["elements"] has exactly the courses you asked for
 ```
@@ -230,10 +238,10 @@ client-side, or use the browser approach below.
 ### Browser fallback for keyword search
 
 ```python
-new_tab("https://www.coursera.org/search?query=machine+learning")
-wait_for_load()
-wait(3)  # Results load asynchronously via React
-screenshot()
+await new_tab("https://www.coursera.org/search?query=machine+learning")
+await wait_for_load()
+await wait(3)  # Results load asynchronously via React
+await screenshot()
 ```
 
 Note: The search results page (`/search?query=...`) is a client-rendered React app. The
@@ -245,7 +253,7 @@ HTML returned by `http_get` does NOT contain course cards — it's a bare shell 
 ## 7. Course Detail HTML Page (http_get — works, limited data)
 
 ```python
-html = http_get("https://www.coursera.org/learn/machine-learning")
+html = await js('fetch(" + r""https://www.coursera.org/learn/machine-learning"" + r").then(r=>r.text())
 # html is ~980KB of server-rendered HTML (no NEXT_DATA, no Apollo state)
 ```
 
@@ -280,7 +288,7 @@ Use the API (`courses.v1?ids=...`) to get those from the slug.
 ```python
 # Get course data from slug (need ID first — get it from catalog or search)
 # Pattern: enumerate catalog, match by slug
-resp = http_get("https://api.coursera.org/api/courses.v1?fields=name,slug,description&limit=100&start=0")
+resp = await js('fetch(" + r""https://api.coursera.org/api/courses.v1?fields=name,slug,description&limit=100&start=0"" + r").then(r=>r.text())
 data = json.loads(resp)
 by_slug = {el["slug"]: el for el in data["elements"]}
 course = by_slug.get("machine-learning")

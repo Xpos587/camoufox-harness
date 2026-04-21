@@ -1,4 +1,12 @@
-# GitHub — Repo actions (star, unstar, watch)
+# 
+> **Adapted from browser-harness to camoufox-harness (Playwright API)**
+>
+> Original browser-harness code used CDP/sync calls. This has been adapted to use Playwright async API.
+>
+> If you find issues, check `helpers.py` for available functions.
+
+
+GitHub — Repo actions (star, unstar, watch)
 
 `https://github.com/{owner}/{repo}` — user-triggered actions on the repo header (Star, Unstar, Watch, Unwatch) are HTML forms that POST back to GitHub with the session's CSRF token already rendered inline. **Submit the form — do not click the button.**
 
@@ -6,11 +14,11 @@
 
 ```python
 # Precondition: user is logged in
-if not js('!!document.querySelector("meta[name=user-login]")'):
+if not await js('!!document.querySelector("meta[name=user-login]")'):
     raise RuntimeError("not logged in to GitHub")
 
 # Star the current repo
-js("""
+await js("""
 (()=>{
   const f = document.querySelector('form[action$="/star"]');
   if (!f) return 'already-starred-or-missing';
@@ -18,11 +26,11 @@ js("""
   return 'submitted';
 })()
 """)
-wait(2)
-wait_for_load()
+await wait(2)
+await wait_for_load()
 
 # Verify — the toggle swaps which form is present
-starred = js('!!document.querySelector(\'form[action$="/unstar"]\')')
+starred = await js('!!document.querySelector(\'form[action$="/unstar"]\')')
 ```
 
 Same pattern for the reverse (`form[action$="/unstar"]`) and for watch/unwatch (`form[action$="/subscription"]` + a hidden `_method` field, see below).
@@ -32,7 +40,7 @@ Same pattern for the reverse (`form[action$="/unstar"]`) and for watch/unwatch (
 The visible Star button looks like `button[aria-label^="Star "]`, but that selector has two gotchas on the modern repo header:
 
 - **There are two matching buttons.** The first one `querySelector` returns is a hidden fallback inside the sticky sub-header form with `getBoundingClientRect() == {x:0, y:0, w:0, h:0}`. Coordinate-clicking it does nothing because it has no geometry.
-- **Synthetic `.click()` on the visible React button does not persist the star.** The click fires, `aria-label` stays `Star ...`, network tab shows no POST. GitHub's component swallows the synthetic event somewhere in its React fiber handler.
+- **Synthetic `.await click()` on the visible React button does not persist the star.** The click fires, `aria-label` stays `Star ...`, network tab shows no POST. GitHub's component swallows the synthetic event somewhere in its React fiber handler.
 
 `form.submit()` sidesteps both problems — it bypasses React entirely and goes straight to the HTML form's POST. The authenticity token is already in a hidden input inside the form, so there's nothing extra to fetch.
 
@@ -42,7 +50,7 @@ The subscription form uses a shared endpoint with a `_method` override:
 
 ```python
 # Watch (all activity)
-js("""
+await js("""
 (()=>{
   const f = document.querySelector('form[action$="/subscription"]');
   if (!f) return 'missing';
@@ -62,4 +70,4 @@ GitHub renders different form attributes (different `_method` hidden input value
 
 - **If the user is not logged in the forms are not rendered at all.** `meta[name="user-login"]` is the cheapest pre-check.
 
-- **For read-only star counts, don't touch the DOM — use the API.** `http_get("https://api.github.com/repos/{owner}/{repo}")` returns `stargazers_count` without any browser interaction. See `scraping.md`. Only use the form-submit pattern when you actually need to *change* state on behalf of the logged-in user.
+- **For read-only star counts, don't touch the DOM — use the API.** `await js('fetch(" + r""https://api.github.com/repos/{owner}/{repo}"" + r").then(r=>r.text())` returns `stargazers_count` without any browser interaction. See `scraping.md`. Only use the form-submit pattern when you actually need to *change* state on behalf of the logged-in user.

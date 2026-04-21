@@ -1,4 +1,12 @@
-# Product Hunt Scraping Skills
+# 
+> **Adapted from browser-harness to camoufox-harness (Playwright API)**
+>
+> Original browser-harness code used CDP/sync calls. This has been adapted to use Playwright async API.
+>
+> If you find issues, check `helpers.py` for available functions.
+
+
+Product Hunt Scraping Skills
 
 Field-tested against https://www.producthunt.com on 2026-04-18.
 All selectors verified with actual browser runs.
@@ -16,17 +24,17 @@ Product Hunt is a React SPA. Key structural facts discovered:
 - **4 homepage sections**: today, yesterday, last week, last month (5 products each, plus "see all")
 - **Today's votes are hidden** for the first 4 hours of each day (`—` instead of count)
 - **Homepage has 30 fixed post-items** — scrolling does NOT load more
-- **`goto()` may return `ERR_ABORTED`** for producthunt.com in some browser sessions — use `new_tab()` instead
+- **`await goto()` may return `ERR_ABORTED`** for producthunt.com in some browser sessions — use `await new_tab()` instead
 
 ---
 
 ## Navigation Pattern
 
 ```python
-# goto() may fail on Product Hunt — use new_tab() reliably
-tid = new_tab("https://www.producthunt.com")
-wait(4)  # React SPA needs time; wait_for_load() alone is insufficient
-page = page_info()
+# await goto() may fail on Product Hunt — use await new_tab() reliably
+tid = await new_tab("https://www.producthunt.com")
+await wait(4)  # React SPA needs time; await wait_for_load() alone is insufficient
+page = await page_info()
 # Verify: url should be 'https://www.producthunt.com/'
 ```
 
@@ -40,7 +48,7 @@ The homepage shows today's launches plus rolling sections for yesterday, last we
 
 ```python
 # Full extraction with name, tagline, slug, votes, topics
-products = js("""
+products = await js("""
 JSON.stringify(
   Array.from(document.querySelectorAll('[data-test^="post-item-"]')).map(el => {
     var id = el.getAttribute('data-test').replace('post-item-', '');
@@ -134,10 +142,10 @@ Selector changes on topic pages — uses `[data-test^="product:"]` not `post-ite
 
 ```python
 # Navigate to topic
-new_tab("https://www.producthunt.com/topics/developer-tools")
-wait(3)
+await new_tab("https://www.producthunt.com/topics/developer-tools")
+await wait(3)
 
-products = js("""
+products = await js("""
 JSON.stringify(
   Array.from(document.querySelectorAll('[data-test^="product:"]')).map(el => {
     var slug = el.getAttribute('data-test').replace('product:', '');
@@ -180,14 +188,14 @@ URL: `https://www.producthunt.com/products/claude-opus-4-7`
 ### Get total vote count (sidebar button)
 ```python
 # Use [data-test="vote-button"] — different from [data-test="action-bar-vote-button"]
-vote_text = js("document.querySelector('[data-test=\"vote-button\"]').outerText.trim().replace(/\\s+/g, ' ')")
+vote_text = await js("document.querySelector('[data-test=\"vote-button\"]').outerText.trim().replace(/\\s+/g, ' ')")
 # Returns: "Upvote • 466 points"
 # Parse votes: vote_text.split('•')[1].strip().replace(' points', '').replace(',', '')
 ```
 
 ### Get review count and rating
 ```python
-review_link = js("JSON.stringify(Array.from(document.querySelectorAll('a')).filter(a => a.href && a.href.includes('/reviews') && a.outerText.includes('review')).map(a => a.outerText.trim()).slice(0, 1))")
+review_link = await js("JSON.stringify(Array.from(document.querySelectorAll('a')).filter(a => a.href && a.href.includes('/reviews') && a.outerText.includes('review')).map(a => a.outerText.trim()).slice(0, 1))")
 # Returns: ["1 review"] or ["5.0\n(731 reviews)"]
 ```
 
@@ -206,10 +214,10 @@ URL: `https://www.producthunt.com/search?q=AI+agent`
 Selector: `[data-test^="spotlight-result-product-"]`
 
 ```python
-new_tab("https://www.producthunt.com/search?q=AI+agent")
-wait(3)
+await new_tab("https://www.producthunt.com/search?q=AI+agent")
+await wait(3)
 
-results = js("""
+results = await js("""
 JSON.stringify(
   Array.from(document.querySelectorAll('[data-test^="spotlight-result-product-"]')).map(el => {
     var id = el.getAttribute('data-test').replace('spotlight-result-product-', '');
@@ -253,7 +261,7 @@ JSON.stringify(
 
 1. **`innerText` returns `None` on complex elements** — use `outerText` or break into simple single-property expressions. Avoid chaining DOM traversal inside `JSON.stringify()` on large objects.
 
-2. **`goto()` returns `ERR_ABORTED`** for producthunt.com in some browser sessions — always use `new_tab("url")` instead.
+2. **`await goto()` returns `ERR_ABORTED`** for producthunt.com in some browser sessions — always use `await new_tab("url")` instead.
 
 3. **`a[href^="/posts/"]` matches nothing** — Product Hunt uses `/products/` for product URLs, not `/posts/`.
 
@@ -265,7 +273,7 @@ JSON.stringify(
 
 7. **Ranked product names contain rank prefix** — `"1. Claude Opus 4.7"` — strip with regex `re.sub(r'^\d+\.\s+', '', name)`.
 
-8. **`wait(3)` required after `wait_for_load()`** — the React SPA continues rendering after the load event.
+8. **`await wait(3)` required after `await wait_for_load()`** — the React SPA continues rendering after the load event.
 
 ---
 
@@ -273,11 +281,11 @@ JSON.stringify(
 
 ```python
 # 1. Open Product Hunt in a new tab
-new_tab("https://www.producthunt.com/leaderboard/daily/2026/4/18")
-wait(4)
+await new_tab("https://www.producthunt.com/leaderboard/daily/2026/4/18")
+await wait(4)
 
 # 2. Extract all products with metadata
-products = js("""
+products = await js("""
 JSON.stringify(
   Array.from(document.querySelectorAll('[data-test^="post-item-"]')).map(el => {
     var id = el.getAttribute('data-test').replace('post-item-', '');
@@ -302,6 +310,6 @@ JSON.stringify(
 import json
 data = json.loads(products)
 print(f"Found {len(data)} products")
-for p in data:
+async for p in data:
     print(f"  {p['name']} — {p['votes']} votes — {p['tagline']}")
 ```

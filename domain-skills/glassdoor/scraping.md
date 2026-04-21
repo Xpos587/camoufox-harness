@@ -1,4 +1,12 @@
-# Glassdoor — Company Data, Reviews, Jobs & Salaries
+# 
+> **Adapted from browser-harness to camoufox-harness (Playwright API)**
+>
+> Original browser-harness code used CDP/sync calls. This has been adapted to use Playwright async API.
+>
+> If you find issues, check `helpers.py` for available functions.
+
+
+Glassdoor — Company Data, Reviews, Jobs & Salaries
 
 Field-tested against glassdoor.com on 2026-04-18.
 
@@ -23,30 +31,30 @@ required in a real browser). Cookie-only bypass also fails — the `__cf_bm` coo
 
 `api.glassdoor.com` (the old public partner API) returned `410 Gone` — permanently shut down.
 
-**Use `goto()` + `wait()` exclusively. Never use `http_get` for Glassdoor.**
+**Use `await goto()` + `await wait()` exclusively. Never use `http_get` for Glassdoor.**
 
 ---
 
 ## Do this first: open in a new tab, wait for CF to resolve
 
 ```python
-new_tab("https://www.glassdoor.com/Reviews/Google-Reviews-E9079.htm")
-wait_for_load()
-wait(5)  # CF managed challenge runs for ~2-4s after readyState=complete
+await new_tab("https://www.glassdoor.com/Reviews/Google-Reviews-E9079.htm")
+await wait_for_load()
+await wait(5)  # CF managed challenge runs for ~2-4s after readyState=complete
 ```
 
-`wait(5)` is mandatory. CF's managed challenge executes JS fingerprinting probes after the DOM
+`await wait(5)` is mandatory. CF's managed challenge executes JS fingerprinting probes after the DOM
 is ready. Extracting before this resolves returns an empty or partial page.
 
 Verify you are past the challenge before extracting:
 
 ```python
-title = js("document.title")
-url = page_info()["url"]
+title = await js("document.title")
+url = await page_info()["url"]
 if "Security" in title or "__cf_chl_tk" in url:
     # CF challenge did not resolve yet — wait longer
-    wait(5)
-    title = js("document.title")
+    await wait(5)
+    title = await js("document.title")
     assert "Security" not in title, "Still on CF block page"
 ```
 
@@ -80,14 +88,14 @@ import json
 from urllib.parse import quote_plus
 
 query = "software engineer"
-new_tab(f"https://www.glassdoor.com/Job/jobs.htm?sc.keyword={quote_plus(query)}")
-wait_for_load()
-wait(5)   # CF challenge + JS render
+await new_tab(f"https://www.glassdoor.com/Job/jobs.htm?sc.keyword={quote_plus(query)}")
+await wait_for_load()
+await wait(5)   # CF challenge + JS render
 
 # Dismiss cookie banner if present (GDPR regions)
 dismiss_cookie_banner()
 
-jobs = js("""
+jobs = await js("""
 (function() {
   // Primary selector as of 2026-04
   var cards = document.querySelectorAll('li[data-jobid]');
@@ -120,7 +128,7 @@ jobs = js("""
 """)
 
 results = json.loads(jobs)
-for r in results:
+async for r in results:
     print(r["title"], "|", r["company"], "|", r["location"])
 ```
 
@@ -128,7 +136,7 @@ for r in results:
 serves a different layout under A/B tests. The screenshot will reveal the actual card selector.
 
 ```python
-screenshot("/tmp/glassdoor_jobs.png")
+await screenshot("/tmp/glassdoor_jobs.png")
 # Inspect the image, then adjust the querySelectorAll selector above
 ```
 
@@ -145,16 +153,16 @@ from urllib.parse import quote_plus
 query = "data scientist"
 all_jobs = []
 
-for page in range(1, 4):   # pages 1-3, ~10 cards each
+async for page in range(1, 4):   # pages 1-3, ~10 cards each
     url = f"https://www.glassdoor.com/Job/jobs.htm?sc.keyword={quote_plus(query)}&p={page}"
-    goto(url)
-    wait_for_load()
-    wait(5 if page == 1 else 3)  # first page needs CF wait; subsequent pages are faster
+    await goto(url)
+    await wait_for_load()
+    await wait(5 if page == 1 else 3)  # first page needs CF wait; subsequent pages are faster
 
     if page == 1:
         dismiss_cookie_banner()
 
-    batch_json = js("""
+    batch_json = await js("""
     (function() {
       var cards = document.querySelectorAll('li[data-jobid], [class*="JobsList_jobListItem"]');
       var out = [];
@@ -201,12 +209,12 @@ import json, re
 employer_id = 9079
 company_slug = "Google"
 
-goto(f"https://www.glassdoor.com/Overview/Working-at-{company_slug}-EI_IE{employer_id}.htm")
-wait_for_load()
-wait(5)   # CF challenge
+await goto(f"https://www.glassdoor.com/Overview/Working-at-{company_slug}-EI_IE{employer_id}.htm")
+await wait_for_load()
+await wait(5)   # CF challenge
 
 # Try __NEXT_DATA__ first — fastest and most complete
-next_data_raw = js("document.getElementById('__NEXT_DATA__') ? document.getElementById('__NEXT_DATA__').textContent : null")
+next_data_raw = await js("document.getElementById('__NEXT_DATA__') ? document.getElementById('__NEXT_DATA__').textContent : null")
 
 if next_data_raw:
     nd = json.loads(next_data_raw)
@@ -220,7 +228,7 @@ if next_data_raw:
         print("Name:", employer.get("name") or employer.get("shortName"))
 else:
     # Fall back to DOM selectors
-    summary = js("""
+    summary = await js("""
     (function() {
       var ratingEl  = document.querySelector('[data-test="rating"], .ratingNumber, [class*="ratingNum"]');
       var countEl   = document.querySelector('[data-test="reviewCount"], .reviewCount, [class*="reviewCount"]');
@@ -250,13 +258,13 @@ import json
 employer_id = 9079
 company_slug = "Google"
 
-goto(f"https://www.glassdoor.com/Reviews/{company_slug}-Reviews-E{employer_id}.htm")
-wait_for_load()
-wait(5)
+await goto(f"https://www.glassdoor.com/Reviews/{company_slug}-Reviews-E{employer_id}.htm")
+await wait_for_load()
+await wait(5)
 
 dismiss_cookie_banner()
 
-reviews = js("""
+reviews = await js("""
 (function() {
   // Review cards — confirmed selector pattern
   var cards = document.querySelectorAll('[id^="empReview_"], [data-test="review-card"], [class*="ReviewCard"]');
@@ -298,7 +306,7 @@ reviews = js("""
 """)
 
 results = json.loads(reviews)
-for r in results:
+async for r in results:
     print(f"{r['stars']}★ | {r['title']} | {r['jobTitle']}")
     print(f"  + {r['pros'][:100]}")
     print(f"  - {r['cons'][:100]}")
@@ -316,12 +324,12 @@ from urllib.parse import quote_plus
 role = "software-engineer"
 n = len(role)  # 17 for "software-engineer"
 
-goto(f"https://www.glassdoor.com/Salaries/{role}-salary-SRCH_KO0,{n}.htm")
-wait_for_load()
-wait(5)
+await goto(f"https://www.glassdoor.com/Salaries/{role}-salary-SRCH_KO0,{n}.htm")
+await wait_for_load()
+await wait(5)
 
 # Try __NEXT_DATA__ for structured salary data
-next_data_raw = js("document.getElementById('__NEXT_DATA__') ? document.getElementById('__NEXT_DATA__').textContent : null")
+next_data_raw = await js("document.getElementById('__NEXT_DATA__') ? document.getElementById('__NEXT_DATA__').textContent : null")
 
 if next_data_raw:
     nd = json.loads(next_data_raw)
@@ -332,7 +340,7 @@ if next_data_raw:
         print(json.dumps(salary_data, indent=2))
 
 # DOM fallback
-salary_summary = js("""
+salary_summary = await js("""
 (function() {
   var medianEl = document.querySelector('[data-test="salary-estimate"], [class*="salaryEstimate"], [class*="median"]');
   var rangeEl  = document.querySelector('[data-test="salary-range"],  [class*="salaryRange"]');
@@ -360,7 +368,7 @@ Dismiss it before extracting anything that requires scrolling:
 ```python
 def dismiss_glassdoor_login_modal():
     """Close the Glassdoor sign-in modal. Safe to call if no modal is present."""
-    closed = js("""
+    closed = await js("""
     (function() {
       var selectors = [
         '[alt="Close"]',
@@ -373,7 +381,7 @@ def dismiss_glassdoor_login_modal():
       for (var i = 0; i < selectors.length; i++) {
         var btn = document.querySelector(selectors[i]);
         if (btn && btn.offsetParent !== null) {
-          btn.click();
+          btn.await click();
           return selectors[i];
         }
       }
@@ -381,12 +389,12 @@ def dismiss_glassdoor_login_modal():
     })()
     """)
     if closed:
-        wait(1)
+        await wait(1)
     return closed
 
 def dismiss_cookie_banner():
     """Dismiss GDPR consent overlay. Safe to call even if no banner is present."""
-    dismissed = js("""
+    dismissed = await js("""
     (function() {
       var selectors = [
         'button[data-test="accept-cookies"]',
@@ -398,7 +406,7 @@ def dismiss_cookie_banner():
       for (var i = 0; i < selectors.length; i++) {
         var btn = document.querySelector(selectors[i]);
         if (btn && btn.offsetParent !== null) {
-          btn.click();
+          btn.await click();
           return selectors[i];
         }
       }
@@ -406,7 +414,7 @@ def dismiss_cookie_banner():
     })()
     """)
     if dismissed:
-        wait(1)
+        await wait(1)
     return dismissed
 ```
 
@@ -418,24 +426,24 @@ may itself be outside the viewport.
 
 ## Detecting whether you are past the CF challenge
 
-After `goto()` + `wait(5)`, confirm you are on the real page:
+After `await goto()` + `await wait(5)`, confirm you are on the real page:
 
 ```python
 def glassdoor_is_cf_blocked() -> bool:
     """True if the CF managed challenge is still running."""
-    title = js("document.title") or ""
-    url   = page_info()["url"]
+    title = await js("document.title") or ""
+    url   = await page_info()["url"]
     return "Security" in title or "__cf_chl_tk" in url
 
 # Usage
-goto("https://www.glassdoor.com/Reviews/Google-Reviews-E9079.htm")
-wait_for_load()
-wait(5)
+await goto("https://www.glassdoor.com/Reviews/Google-Reviews-E9079.htm")
+await wait_for_load()
+await wait(5)
 
 if glassdoor_is_cf_blocked():
-    wait(10)   # give CF extra time
+    await wait(10)   # give CF extra time
     if glassdoor_is_cf_blocked():
-        screenshot("/tmp/glassdoor_cf_block.png")
+        await screenshot("/tmp/glassdoor_cf_block.png")
         raise RuntimeError("CF challenge did not resolve — check screenshot")
 ```
 
@@ -450,12 +458,12 @@ To find the ID for any company:
 from urllib.parse import quote_plus
 
 company_name = "OpenAI"
-goto(f"https://www.glassdoor.com/Search/results.htm?keyword={quote_plus(company_name)}&locT=N")
-wait_for_load()
-wait(5)
+await goto(f"https://www.glassdoor.com/Search/results.htm?keyword={quote_plus(company_name)}&locT=N")
+await wait_for_load()
+await wait(5)
 
 # Extract company cards from search results
-companies = js("""
+companies = await js("""
 (function() {
   var cards = document.querySelectorAll('[data-test="employer-card"], [class*="EmployerCard"], [class*="employer-card"]');
   var out = [];
@@ -479,7 +487,7 @@ companies = js("""
 """)
 
 import json
-for c in json.loads(companies):
+async for c in json.loads(companies):
     print(c["empId"], c["name"], c["href"][:60])
 ```
 
@@ -492,7 +500,7 @@ for c in json.loads(companies):
   `__cf_bm` cookie returned in the 403 response is TLS-fingerprint-bound and cannot be replayed.
   `api.glassdoor.com` is 410 Gone (shut down). Only real Chrome via CDP works.
 
-- **`wait(5)` minimum after `wait_for_load()`.** CF's managed challenge runs for 2-4 seconds after
+- **`await wait(5)` minimum after `await wait_for_load()`.** CF's managed challenge runs for 2-4 seconds after
   `readyState = complete`. Extracting too early returns the challenge page HTML, not Glassdoor
   content. If you get empty results or the title is "Security | Glassdoor", wait longer.
 
@@ -518,8 +526,8 @@ for c in json.loads(companies):
   canonical redirect from a search result.
 
 - **Rate limiting.** Glassdoor rate-limits by IP after ~5 company-page loads per minute.
-  Use `wait(5)` between consecutive company page navigations. Salary and reviews pages are heavier
-  — use `wait(8)` between those.
+  Use `await wait(5)` between consecutive company page navigations. Salary and reviews pages are heavier
+  — use `await wait(8)` between those.
 
 - **Salary URL requires character-count parameter.** The `SRCH_KO0,{n}` fragment encodes
   `0` (start of role name) and `n` (end, i.e., `len(role_slug)`). For `"software-engineer"` (17
@@ -531,13 +539,13 @@ for c in json.loads(companies):
 
 - **PerimeterX is also active as a secondary layer.** After passing CF, Glassdoor runs behavioral
   fingerprinting. Rapid automated scrolling, mouse movement, or navigation patterns may trigger a
-  secondary block. Mitigate with `wait(2)` between actions and avoid scripted mouse movement.
+  secondary block. Mitigate with `await wait(2)` between actions and avoid scripted mouse movement.
 
 - **Review and salary data require login on some accounts.** Anonymous sessions get a subset of
   data. If a field returns empty consistently, the page may require authentication before surfacing
   that data in the DOM or `__NEXT_DATA__`.
 
-- **`goto()` vs `new_tab()` for first navigation.** Use `new_tab()` for the very first Glassdoor
-  page in a session. If the harness is attached to a non-Glassdoor tab, `goto()` can silently
+- **`await goto()` vs `await new_tab()` for first navigation.** Use `await new_tab()` for the very first Glassdoor
+  page in a session. If the harness is attached to a non-Glassdoor tab, `await goto()` can silently
   fail to pass the CF challenge because the existing tab may not have a clean origin context.
-  After the first successful load, `goto()` works fine for subsequent Glassdoor navigations.
+  After the first successful load, `await goto()` works fine for subsequent Glassdoor navigations.

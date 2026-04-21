@@ -1,4 +1,12 @@
-# News Aggregation — Multi-Source
+# 
+> **Adapted from browser-harness to camoufox-harness (Playwright API)**
+>
+> Original browser-harness code used CDP/sync calls. This has been adapted to use Playwright async API.
+>
+> If you find issues, check `helpers.py` for available functions.
+
+
+News Aggregation — Multi-Source
 
 Field-tested against TechCrunch, The Verge, Ars Technica, BBC, Guardian, Wired, NPR, HN, Reuters, CNN, NYT (2026-04-18).
 
@@ -42,7 +50,7 @@ RSS_FEEDS = [
 
 def fetch_rss(name_url):
     name, url = name_url
-    xml_data = http_get(url)
+    xml_data = await js('fetch(" + r"url" + r").then(r=>r.text())
     root = ET.fromstring(xml_data)
     items = root.findall('.//item')
     return name, items
@@ -51,7 +59,7 @@ with ThreadPoolExecutor(max_workers=len(RSS_FEEDS)) as ex:
     results = list(ex.map(fetch_rss, RSS_FEEDS))
 
 for name, items in results:
-    for item in items[:5]:
+    async for item in items[:5]:
         title = item.find('title').text
         link  = item.find('link').text
         print(f"[{name}] {title}")
@@ -66,11 +74,11 @@ import xml.etree.ElementTree as ET
 
 NS = {'atom': 'http://www.w3.org/2005/Atom'}
 
-xml_data = http_get("https://www.theverge.com/rss/index.xml")
+xml_data = await js('fetch(" + r""https://www.theverge.com/rss/index.xml"" + r").then(r=>r.text())
 root = ET.fromstring(xml_data)
 entries = root.findall('.//atom:entry', NS)   # 10 entries
 
-for e in entries:
+async for e in entries:
     title = e.find('atom:title', NS).text
     link  = e.find('atom:link', NS).get('href')
     print(title, link)
@@ -94,14 +102,14 @@ NYT, Guardian, HN, CNN all return full HTML via `http_get` without issues. The U
 
 ```python
 headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
-html = http_get("https://www.nytimes.com", headers=headers)  # 1.1MB, works
-html = http_get("https://news.ycombinator.com")               # 34KB, works without UA
+html = await js('fetch(" + r""https://www.nytimes.com", headers=headers" + r").then(r=>r.text())  # 1.1MB, works
+html = await js('fetch(" + r""https://news.ycombinator.com"" + r").then(r=>r.text())               # 34KB, works without UA
 ```
 
 **HN parsing via regex (no HTML parser needed):**
 ```python
 import re
-html = http_get("https://news.ycombinator.com")
+html = await js('fetch(" + r""https://news.ycombinator.com"" + r").then(r=>r.text())
 stories = re.findall(r'class="titleline"><a href="([^"]+)"[^>]*>([^<]+)<', html)
 # Returns list of (url, title) tuples — 30 stories on the front page
 ```
@@ -113,11 +121,11 @@ stories = re.findall(r'class="titleline"><a href="([^"]+)"[^>]*>([^<]+)<', html)
 No consent banner in headless browser (US region served; GDPR banner only appears for EU IP). Articles use `article h2` selectors.
 
 ```python
-goto("https://www.bbc.com/news")
-wait_for_load()
-wait(2)
+await goto("https://www.bbc.com/news")
+await wait_for_load()
+await wait(2)
 
-headlines = js("""
+headlines = await js("""
   Array.from(document.querySelectorAll('article h2'))
     .map(h => ({
       title: h.innerText.trim(),
@@ -131,10 +139,10 @@ headlines = js("""
 
 If running from a EU IP and a consent banner appears:
 ```python
-accept = js("""
+accept = await js("""
   var btns = Array.from(document.querySelectorAll('button'));
   var btn = btns.find(b => /accept all|agree|continue/i.test(b.innerText));
-  if (btn) { btn.click(); return 'clicked: ' + btn.innerText; }
+  if (btn) { btn.await click(); return 'clicked: ' + btn.innerText; }
   return 'no banner';
 """)
 ```
@@ -146,11 +154,11 @@ Confirmed: `h3` elements on BBC are site-chrome labels ("The BBC is in multiple 
 `article` and `.post-block` selectors return 0 results — TechCrunch changed their layout. Articles are in `h3` elements.
 
 ```python
-goto("https://techcrunch.com")
-wait_for_load()
-wait(2)
+await goto("https://techcrunch.com")
+await wait_for_load()
+await wait(2)
 
-articles = js("""
+articles = await js("""
   Array.from(document.querySelectorAll('h3'))
     .map(h => ({
       title: h.innerText?.trim(),
@@ -166,16 +174,16 @@ RSS is almost always faster for TechCrunch: **0.08s vs 3-5s browser** load. Only
 
 ### Reuters (`reuters.com`)
 
-`http_get` returns 403. Browser loads but the homepage is heavily JS-rendered with delayed hydration. `h3` selectors only return nav elements after standard `wait_for_load()`. Use `wait(3)` plus scroll:
+`http_get` returns 403. Browser loads but the homepage is heavily JS-rendered with delayed hydration. `h3` selectors only return nav elements after standard `await wait_for_load()`. Use `await wait(3)` plus scroll:
 
 ```python
-goto("https://www.reuters.com")
-wait_for_load()
-wait(3)
-js("window.scrollTo(0, 500)")
-wait(1)
+await goto("https://www.reuters.com")
+await wait_for_load()
+await wait(3)
+await js("window.scrollTo(0, 500)")
+await wait(1)
 # Category links work for topic nav:
-links = js("""
+links = await js("""
   Array.from(document.querySelectorAll('a[href*="/world/"], a[href*="/technology/"]'))
     .filter(a => a.innerText.trim().length > 20)
     .map(a => ({text: a.innerText.trim(), href: a.href}))
@@ -193,7 +201,7 @@ Does the site have an RSS/Atom feed?
          - Atom:    root.findall('.//atom:entry', {'atom': 'http://www.w3.org/2005/Atom'})
   NO  → Does http_get return valid HTML (not 403/401/JS shell)?
           YES → http_get + regex/BeautifulSoup (fast, ~0.2-0.3s)
-          NO  → goto + wait_for_load + wait(2) + js() extraction (slow, 3-8s)
+          NO  → goto + wait_for_load + await wait(2) + await js() extraction (slow, 3-8s)
 ```
 
 ## What to skip

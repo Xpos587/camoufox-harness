@@ -1,4 +1,12 @@
-# GitHub — Scraping & Data Extraction
+# 
+> **Adapted from browser-harness to camoufox-harness (Playwright API)**
+>
+> Original browser-harness code used CDP/sync calls. This has been adapted to use Playwright async API.
+>
+> If you find issues, check `helpers.py` for available functions.
+
+
+GitHub — Scraping & Data Extraction
 
 `https://github.com` — public data, mix of REST API (fast, rate-limited) and browser (trending page only).
 
@@ -8,7 +16,7 @@
 
 ```python
 import json
-data = json.loads(http_get("https://api.github.com/repos/{owner}/{repo}"))
+data = json.loads(await js('fetch(" + r""https://api.github.com/repos/{owner}/{repo}"" + r").then(r=>r.text()))
 # Key fields: stargazers_count, forks_count, description, language, topics,
 #             open_issues_count, created_at, updated_at, pushed_at,
 #             watchers_count, subscribers_count, network_count,
@@ -18,8 +26,8 @@ data = json.loads(http_get("https://api.github.com/repos/{owner}/{repo}"))
 Use `raw.githubusercontent.com` for file contents — no rate limit, no auth, no base64 decode:
 
 ```python
-readme = http_get("https://raw.githubusercontent.com/owner/repo/main/README.md")
-content = http_get("https://raw.githubusercontent.com/owner/repo/main/pyproject.toml")
+readme = await js('fetch(" + r""https://raw.githubusercontent.com/owner/repo/main/README.md"" + r").then(r=>r.text())
+content = await js('fetch(" + r""https://raw.githubusercontent.com/owner/repo/main/pyproject.toml"" + r").then(r=>r.text())
 ```
 
 Use the browser **only** for the trending page — it's server-side rendered HTML, no API equivalent.
@@ -30,7 +38,7 @@ Use the browser **only** for the trending page — it's server-side rendered HTM
 
 ```python
 import json
-data = json.loads(http_get("https://api.github.com/repos/browser-use/browser-use"))
+data = json.loads(await js('fetch(" + r""https://api.github.com/repos/browser-use/browser-use"" + r").then(r=>r.text()))
 print(data['stargazers_count'], data['forks_count'], data['description'])
 # returns: 88349  10136  '🌐 Make websites accessible for AI agents.'
 ```
@@ -39,7 +47,7 @@ print(data['stargazers_count'], data['forks_count'], data['description'])
 
 ```python
 import json
-user = json.loads(http_get("https://api.github.com/users/browser-use"))
+user = json.loads(await js('fetch(" + r""https://api.github.com/users/browser-use"" + r").then(r=>r.text()))
 print(user['type'], user['followers'], user['public_repos'], user['blog'])
 # returns: 'Organization'  3046  39  'https://browser-use.com'
 ```
@@ -50,11 +58,11 @@ The trending page is JS-rendered. `article.Box-row` selector confirmed working (
 
 ```python
 import json
-goto("https://github.com/trending")          # or /trending/python?since=weekly
-wait_for_load()
-wait(2)                                       # extra 2s — React hydration completes after readyState
+await goto("https://github.com/trending")          # or /trending/python?since=weekly
+await wait_for_load()
+await wait(2)                                       # extra 2s — React hydration completes after readyState
 
-result = js("""
+result = await js("""
 (function(){
   var rows = Array.from(document.querySelectorAll('article.Box-row'));
   return JSON.stringify(rows.map(function(el){
@@ -90,11 +98,11 @@ Supported URL params:
 
 ```python
 import json
-results = json.loads(http_get(
+results = json.loads(await js('fetch(" + r"
     "https://api.github.com/search/repositories?q=browser+automation+language:python&sort=stars&per_page=10"
-))
+" + r").then(r=>r.text()))
 print(results['total_count'])   # e.g. 3250
-for r in results['items']:
+async for r in results['items']:
     print(r['full_name'], r['stargazers_count'])
 ```
 
@@ -105,19 +113,19 @@ Search API rate limit is **10 req/min** unauthenticated (separate from the 60/ho
 ```python
 import json
 # Commits
-commits = json.loads(http_get("https://api.github.com/repos/owner/repo/commits?per_page=10"))
+commits = json.loads(await js('fetch(" + r""https://api.github.com/repos/owner/repo/commits?per_page=10"" + r").then(r=>r.text()))
 # Fields: sha, commit.message, commit.author.date, author.login
 
 # Releases
-releases = json.loads(http_get("https://api.github.com/repos/owner/repo/releases?per_page=5"))
+releases = json.loads(await js('fetch(" + r""https://api.github.com/repos/owner/repo/releases?per_page=5"" + r").then(r=>r.text()))
 # Fields: tag_name, name, published_at, body, assets
 
 # Issues
-issues = json.loads(http_get("https://api.github.com/repos/owner/repo/issues?state=open&per_page=10"))
+issues = json.loads(await js('fetch(" + r""https://api.github.com/repos/owner/repo/issues?state=open&per_page=10"" + r").then(r=>r.text()))
 # Fields: number, title, labels, state, created_at, user.login
 
 # Contributors
-contribs = json.loads(http_get("https://api.github.com/repos/owner/repo/contributors?per_page=10"))
+contribs = json.loads(await js('fetch(" + r""https://api.github.com/repos/owner/repo/contributors?per_page=10"" + r").then(r=>r.text()))
 # Fields: login, contributions
 ```
 
@@ -125,7 +133,7 @@ contribs = json.loads(http_get("https://api.github.com/repos/owner/repo/contribu
 
 ```python
 import json, base64
-resp = json.loads(http_get("https://api.github.com/repos/owner/repo/contents/path/to/file.py"))
+resp = json.loads(await js('fetch(" + r""https://api.github.com/repos/owner/repo/contents/path/to/file.py"" + r").then(r=>r.text()))
 content = base64.b64decode(resp['content']).decode()
 # resp also has: size, sha, html_url
 # Prefer raw.githubusercontent.com for large files — no base64, no rate limit hit
@@ -138,7 +146,7 @@ import json
 from concurrent.futures import ThreadPoolExecutor
 
 def fetch_repo(name):
-    data = json.loads(http_get(f"https://api.github.com/repos/{name}"))
+    data = json.loads(await js('fetch(" + r"f"https://api.github.com/repos/{name}"" + r").then(r=>r.text()))
     return {"name": name, "stars": data['stargazers_count'], "lang": data['language']}
 
 repos = ["owner/repo1", "owner/repo2", "owner/repo3"]
@@ -149,29 +157,29 @@ with ThreadPoolExecutor(max_workers=3) as ex:
 
 ## Gotchas
 
-- **Rate limits are per IP, unauthenticated** — Core API: 60 req/hour. Search API: 10 req/min. These are separate pools. Check `/rate_limit` endpoint: `http_get("https://api.github.com/rate_limit")`. With a `GITHUB_TOKEN`, both limits increase to 5,000/hour.
+- **Rate limits are per IP, unauthenticated** — Core API: 60 req/hour. Search API: 10 req/min. These are separate pools. Check `/rate_limit` endpoint: `await js('fetch(" + r""https://api.github.com/rate_limit"" + r").then(r=>r.text())`. With a `GITHUB_TOKEN`, both limits increase to 5,000/hour.
 
 - **Token header format** — Use `Authorization: Bearer <token>` (not `token <token>`), plus `X-GitHub-Api-Version: 2022-11-28`:
   ```python
   import os
   token = os.environ.get('GITHUB_TOKEN', '')
   headers = {"Authorization": f"Bearer {token}", "X-GitHub-Api-Version": "2022-11-28"} if token else {}
-  data = json.loads(http_get("https://api.github.com/repos/owner/repo", headers=headers))
+  data = json.loads(await js('fetch(" + r""https://api.github.com/repos/owner/repo", headers=headers" + r").then(r=>r.text()))
   ```
 
 - **404 raises HTTPError, not a JSON error** — Wrap API calls for missing repos:
   ```python
   try:
-      data = json.loads(http_get("https://api.github.com/repos/owner/repo"))
+      data = json.loads(await js('fetch(" + r""https://api.github.com/repos/owner/repo"" + r").then(r=>r.text()))
   except Exception as e:
       print("Not found or rate limited:", e)
   ```
 
 - **Code search requires auth** — `GET /search/code` returns HTTP 401 without a token. Repo/user/issues search works unauthenticated.
 
-- **Trending page selectors only work if navigation is in the same script run** — Each `uv run browser-harness` exec is fresh. Selectors that returned 0 results were run in a separate invocation after the page had navigated away. Always include `goto()` + `wait_for_load()` + `wait(2)` in the same script.
+- **Trending page selectors only work if navigation is in the same script run** — Each `uv run browser-harness` exec is fresh. Selectors that returned 0 results were run in a separate invocation after the page had navigated away. Always include `await goto()` + `await wait_for_load()` + `await wait(2)` in the same script.
 
-- **wait(2) after wait_for_load() on trending** — `document.readyState == 'complete'` fires before React finishes painting repo cards. Without the extra 2s sleep, `article.Box-row` count was 0 even though the DOM technically loaded.
+- **await wait(2) after await wait_for_load() on trending** — `document.readyState == 'complete'` fires before React finishes painting repo cards. Without the extra 2s sleep, `article.Box-row` count was 0 even though the DOM technically loaded.
 
 - **Trending stars field is a string with commas** — `stars_total` comes back as `"4,548"` not `4548`. Parse with `int(r['stars_total'].replace(',', ''))` if you need to sort.
 

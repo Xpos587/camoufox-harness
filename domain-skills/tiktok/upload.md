@@ -1,4 +1,12 @@
-# TikTok Studio — Upload Video
+# 
+> **Adapted from browser-harness to camoufox-harness (Playwright API)**
+>
+> Original browser-harness code used CDP/sync calls. This has been adapted to use Playwright async API.
+>
+> If you find issues, check `helpers.py` for available functions.
+
+
+TikTok Studio — Upload Video
 
 URL: `https://www.tiktok.com/tiktokstudio/upload?from=upload&lang=en` (always append `&lang=en`)
 
@@ -12,8 +20,8 @@ URL: `https://www.tiktok.com/tiktokstudio/upload?from=upload&lang=en` (always ap
 TikTok shows "A video you were editing wasn't saved" if a previous upload was abandoned. Dismiss it:
 
 1. Find the banner Discard button (y < 300 in the page)
-2. CDP `click(x, y)` on it
-3. A confirmation modal appears — find the red Discard button (y > 300) and CDP `click(x, y)`
+2. CDP `await click(x, y)` on it
+3. A confirmation modal appears — find the red Discard button (y > 300) and CDP `await click(x, y)`
 4. Repeat if multiple stale drafts are stacked
 
 ## Upload flow
@@ -22,7 +30,7 @@ TikTok shows "A video you were editing wasn't saved" if a previous upload was ab
 
 ```python
 upload_file('input[type="file"]', "/path/to/video.mp4")
-wait(12)  # processing takes ~10s for 5-10MB
+await wait(12)  # processing takes ~10s for 5-10MB
 ```
 
 ### 2. Caption
@@ -30,44 +38,44 @@ wait(12)  # processing takes ~10s for 5-10MB
 TikTok pre-fills caption with the filename. Clear it first:
 
 ```python
-js("document.querySelector('div[contenteditable=\"true\"][role=\"combobox\"]').focus()")
-press_key("End")
-for _ in range(25): press_key("Backspace")  # clear filename
-type_text("your caption here #hashtag1 #hashtag2")
-press_key("Escape")  # dismiss hashtag suggestions
-click(700, 50)        # click away to deselect
+await js("document.querySelector('div[contenteditable=\"true\"][role=\"combobox\"]').focus()")
+await press_key("End")
+async for _ in range(25): await press_key("Backspace")  # clear filename
+await type_text("your caption here #hashtag1 #hashtag2")
+await press_key("Escape")  # dismiss hashtag suggestions
+await click(700, 50)        # click away to deselect
 ```
 
-Verify: `js('document.querySelector(\'div[contenteditable="true"][role="combobox"]\').innerText')`
+Verify: `await js('document.querySelector(\'div[contenteditable="true"][role="combobox"]\').innerText')`
 
 ### 3. Schedule
 
 Click the Schedule radio label:
 ```python
-js("(()=>{var l=document.querySelectorAll('label');for(var i=0;i<l.length;i++){if(l[i].textContent.trim()==='Schedule'){l[i].click();break}}})()")
+await js("(()=>{var l=document.querySelectorAll('label');for(var i=0;i<l.length;i++){if(l[i].textContent.trim()==='Schedule'){l[i].await click();break}}})()")
 ```
 
 **Time picker** — uses a scroll-wheel list, NOT a native select. Each `scroll(dy=32)` steps +1 unit, `dy=-32` steps -1 unit.
 
 ```python
 # 1. ScrollIntoView and open the time picker
-js("...scrollIntoView the time input...")
-click(time_input_x, time_input_y)
+await js("...scrollIntoView the time input...")
+await click(time_input_x, time_input_y)
 
 # 2. Read default time, calculate difference
 default_hour, default_min = 13, 5  # from input value
 target_hour, target_min = 20, 25
 
 # 3. Scroll hour column (left, x ≈ 349)
-for _ in range(target_hour - default_hour):
+async for _ in range(target_hour - default_hour):
     scroll(349, dropdown_y, dy=32)  # +1 hour per step
 
 # 4. Scroll minute column (right, x ≈ 437)
-for _ in range((target_min - default_min) // 5):
+async for _ in range((target_min - default_min) // 5):
     scroll(437, dropdown_y, dy=32)  # +5 min per step
 
 # 5. Close and verify
-press_key("Escape")
+await press_key("Escape")
 ```
 
 **Date picker** — click the date input, then click the target day number span.
@@ -78,27 +86,27 @@ Under "Show more" section. Toggle is `[aria-checked]` inside the "AI-generated c
 
 ```python
 # Expand settings
-js("...click 'Show more' span...")
+await js("...click 'Show more' span...")
 # ScrollIntoView the toggle
-js("...scrollIntoView 'ai-generated content' span...")
+await js("...scrollIntoView 'ai-generated content' span...")
 # Read state and click if false
 # A "Turn on" confirmation dialog may appear — click it
 ```
 
 ### 5. Submit
 
-Scroll the Schedule button into view, then CDP `click(x, y)`. After success, page redirects to `/tiktokstudio/content`.
+Scroll the Schedule button into view, then CDP `await click(x, y)`. After success, page redirects to `/tiktokstudio/content`.
 
 ```python
-js("...scrollIntoView Schedule button (offsetWidth > 100)...")
-click(button_x, button_y)
-wait(6)
-assert "content" in page_info()["url"]
+await js("...scrollIntoView Schedule button (offsetWidth > 100)...")
+await click(button_x, button_y)
+await wait(6)
+assert "content" in await page_info()["url"]
 ```
 
 ## Gotchas
 
-- **JS `.click()` doesn't work on TikTok's time picker items** — must use CDP `click(x, y)`
+- **JS `.await click()` doesn't work on TikTok's time picker items** — must use CDP `await click(x, y)`
 - **Time picker uses virtual scroll** — `scroll(x, y, dy=32)` changes value, NOT regular DOM scroll
 - **Caption contenteditable appends on type** — always clear with End + Backspace first, never set innerHTML (breaks React state)
 - **beforeunload dialog** blocks navigation if upload is in progress — use `cdp("Page.handleJavaScriptDialog", accept=True)` to dismiss (see `interaction-skills/dialogs.md`)

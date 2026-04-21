@@ -1,4 +1,12 @@
-# Reddit — Scraping & Post Extraction
+# 
+> **Adapted from browser-harness to camoufox-harness (Playwright API)**
+>
+> Original browser-harness code used CDP/sync calls. This has been adapted to use Playwright async API.
+>
+> If you find issues, check `helpers.py` for available functions.
+
+
+Reddit — Scraping & Post Extraction
 
 Reddit's "new" web UI (`reddit.com`) is a Lit / web-components SPA built around custom elements (`shreddit-post`, `shreddit-comment`, `faceplate-*`). This makes DOM extraction unusually reliable — the custom element tags are stable and exposed on the element itself (no hashed class names).
 
@@ -7,7 +15,7 @@ Use the browser when you're logged in (private subreddits, NSFW gates, rate-limi
 ## URL patterns
 
 - Full post: `https://www.reddit.com/r/<sub>/comments/<id>/<slug>/`
-- Share short-link: `https://www.reddit.com/r/<sub>/s/<hash>` — redirects to the full URL once the page loads. `new_tab(short_url)` + `wait_for_load()` is enough; by the time you read `location.href` it will be the canonical one.
+- Share short-link: `https://www.reddit.com/r/<sub>/s/<hash>` — redirects to the full URL once the page loads. `await new_tab(short_url)` + `await wait_for_load()` is enough; by the time you read `location.href` it will be the canonical one.
 - Old Reddit: append `/.json` to any post URL for anonymous JSON: `https://www.reddit.com/r/<sub>/comments/<id>/.json`.
 - Old UI (simpler DOM, no web components): `https://old.reddit.com/r/<sub>/comments/<id>/` — useful fallback when `shreddit-*` selectors change.
 
@@ -18,7 +26,7 @@ from helpers import http_get
 import json
 
 url = "https://www.reddit.com/r/cursor/comments/1l0u9y7/claude_code_prompt_to_autogenerate_full_cursor/.json"
-data = json.loads(http_get(url, headers={"User-Agent": "Mozilla/5.0"}))
+data = json.loads(await js('fetch(" + r"url, headers={"User-Agent": "Mozilla/5.0"}" + r").then(r=>r.text()))
 post = data[0]["data"]["children"][0]["data"]
 # post fields: title, selftext, author, score, num_comments, created_utc, url, permalink
 comments = data[1]["data"]["children"]  # list of { kind: "t1", data: {...} } or { kind: "more" }
@@ -36,15 +44,15 @@ Core selector: every post renders inside a single `<shreddit-post>` custom eleme
 
 ```bash
 browser-harness <<'PY'
-new_tab("https://www.reddit.com/r/vibecoding/comments/1kwuqpz/")
-wait_for_load()
-wait(3.0)  # SPA still hydrating after readyState=complete
+await new_tab("https://www.reddit.com/r/vibecoding/comments/1kwuqpz/")
+await wait_for_load()
+await wait(3.0)  # SPA still hydrating after readyState=complete
 
 # Scroll to force comment tree lazy-load (twice, ~2000px each)
-scroll(500, 500, dy=2000); wait(1.0)
-scroll(500, 500, dy=2000); wait(1.0)
+scroll(500, 500, dy=2000); await wait(1.0)
+scroll(500, 500, dy=2000); await wait(1.0)
 
-data = js(r"""
+data = await js(r"""
 (()=>{
   const postEl = document.querySelector('shreddit-post');
   if(!postEl) return null;
@@ -90,7 +98,7 @@ PY
 
 ### Share links
 
-`/s/<hash>` URLs redirect before the SPA mounts. You don't need to resolve them manually — just `new_tab(url)` + `wait_for_load()` + `wait(2)`, then read `location.href` for the canonical path.
+`/s/<hash>` URLs redirect before the SPA mounts. You don't need to resolve them manually — just `await new_tab(url)` + `await wait_for_load()` + `await wait(2)`, then read `location.href` for the canonical path.
 
 ### Comment tree lazy-loading
 
@@ -99,7 +107,7 @@ New Reddit renders only the initial visible comments. To get more, **scroll twic
 ### Login / gate detection
 
 ```python
-state = js("""
+state = await js("""
 (()=>{
   const loginWall = !!document.querySelector('a[href*="/login"], [data-testid="login-button"]');
   const ageGate = !!document.querySelector('[data-testid="nsfw-gate"], shreddit-interstitial');
@@ -117,7 +125,7 @@ If `ageGate` is true and you are logged in but haven't opted into NSFW content, 
 - **`depth="0"` is a string attribute.** `[depth="0"]` in a CSS selector works; `depth=0` (no quotes) also works in the newer parser, but the quoted form is safest.
 - **Collapsed comments render with body still in the DOM, but behind `expando-button`.** The `.md` selector still grabs the text — you don't need to expand.
 - **Post body can be empty.** For link posts or image posts, `[slot="text-body"]` doesn't exist; null-check before reading `.innerText`.
-- **`wait_for_load()` is not enough.** Reddit sometimes paints the post skeleton before the content hydrates. Add `wait(2.0)`–`wait(3.0)` after `wait_for_load()` or retry reads on null `shreddit-post`.
+- **`await wait_for_load()` is not enough.** Reddit sometimes paints the post skeleton before the content hydrates. Add `await wait(2.0)`–`await wait(3.0)` after `await wait_for_load()` or retry reads on null `shreddit-post`.
 - **Share URLs (`/s/<hash>`) can't be deep-linked into a comment.** They always land at the post top. If the original raindrop captured `/s/...`, the in-DOM permalink (read from `location.href` after load) is the canonical URL worth storing.
 - **Old Reddit (`old.reddit.com`) is a separate DOM** — no `shreddit-*` elements, no `faceplate-*`. If your login session was established on new Reddit, `old.reddit.com` will still honor the cookie.
 - **For NSFW or quarantined subs**, the browser path requires your account to have opted in. The JSON API requires OAuth with appropriate scope.

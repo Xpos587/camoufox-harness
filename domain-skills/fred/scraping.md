@@ -1,4 +1,12 @@
-# FRED — Federal Reserve Economic Data
+# 
+> **Adapted from browser-harness to camoufox-harness (Playwright API)**
+>
+> Original browser-harness code used CDP/sync calls. This has been adapted to use Playwright async API.
+>
+> If you find issues, check `helpers.py` for available functions.
+
+
+FRED — Federal Reserve Economic Data
 
 `https://fred.stlouisfed.org` / `https://api.stlouisfed.org` — the canonical source for US macroeconomic time series (800,000+ series). The REST API at `api.stlouisfed.org` requires a free registered key. The web endpoints at `fred.stlouisfed.org` (CSV, JSON, HTML) are all blocked to headless HTTP — they consistently timeout with no response. For zero-key access use the BLS API (unemployment, CPI, payrolls) or World Bank API (GDP, growth rates, annual data).
 
@@ -49,7 +57,7 @@ import json, os
 FRED_KEY = os.environ["FRED_KEY"]
 BASE = "https://api.stlouisfed.org/fred"
 
-meta = json.loads(http_get(f"{BASE}/series?series_id=GDP&api_key={FRED_KEY}&file_type=json"))
+meta = json.loads(await js('fetch(" + r"f"{BASE}/series?series_id=GDP&api_key={FRED_KEY}&file_type=json"" + r").then(r=>r.text()))
 s = meta['seriess'][0]
 print(s['title'])               # "Gross Domestic Product"
 print(s['observation_start'])   # "1947-01-01"
@@ -71,18 +79,18 @@ FRED_KEY = os.environ["FRED_KEY"]
 BASE = "https://api.stlouisfed.org/fred"
 
 # Latest 10 values, most recent first
-obs = json.loads(http_get(
+obs = json.loads(await js('fetch(" + r"
     f"{BASE}/series/observations"
     f"?series_id=GDP"
     f"&api_key={FRED_KEY}"
     f"&file_type=json"
     f"&limit=10"
-    f"&sort_order=desc"      # "desc" = newest first, "asc" = oldest first (default)
+    f"&sort_order=desc"      # "desc" = newest first, "asc" = oldest first (default" + r").then(r=>r.text())
 ))
 print(obs['count'])              # 314  (total observations)
 print(obs['observation_start'])  # "1947-01-01"  (what's in the full series)
 
-for o in obs['observations']:
+async for o in obs['observations']:
     date  = o['date']    # "2025-10-01"
     value = o['value']   # "29726.4"  — always a STRING, may be "." for missing
     if value != '.':
@@ -99,7 +107,7 @@ import json, os
 FRED_KEY = os.environ["FRED_KEY"]
 BASE = "https://api.stlouisfed.org/fred"
 
-obs = json.loads(http_get(
+obs = json.loads(await js('fetch(" + r"
     f"{BASE}/series/observations"
     f"?series_id=UNRATE"
     f"&api_key={FRED_KEY}"
@@ -107,8 +115,8 @@ obs = json.loads(http_get(
     f"&observation_start=2020-01-01"
     f"&observation_end=2024-12-31"
     f"&sort_order=desc"
-))
-for o in obs['observations'][:5]:
+" + r").then(r=>r.text()))
+async for o in obs['observations'][:5]:
     print(f"{o['date']}: {o['value']}%")
 # 2024-12-01: 4.1%
 # 2024-11-01: 4.2%
@@ -145,7 +153,7 @@ import json, os
 FRED_KEY = os.environ["FRED_KEY"]
 BASE = "https://api.stlouisfed.org/fred"
 
-results = json.loads(http_get(
+results = json.loads(await js('fetch(" + r"
     f"{BASE}/series/search"
     f"?search_text=unemployment+rate"
     f"&api_key={FRED_KEY}"
@@ -153,8 +161,8 @@ results = json.loads(http_get(
     f"&limit=5"
     f"&order_by=popularity"    # "popularity" | "search_rank" | "series_id" | "title" | "units" | "frequency" | "seasonal_adjustment" | "realtime_start" | "realtime_end" | "last_updated" | "observation_start" | "observation_end"
     f"&sort_order=desc"        # most popular first
-))
-for s in results['seriess']:
+" + r").then(r=>r.text()))
+async for s in results['seriess']:
     print(f"{s['id']}: {s['title']} ({s['frequency_short']}, {s['units_short']})")
 # UNRATE: Unemployment Rate (M, %)
 # UNEMPLOY: Unemployment Level (M, Thous. of Persons)
@@ -169,10 +177,10 @@ FRED_KEY = os.environ["FRED_KEY"]
 BASE = "https://api.stlouisfed.org/fred"
 
 def fetch_latest(series_id):
-    obs = json.loads(http_get(
+    obs = json.loads(await js('fetch(" + r"
         f"{BASE}/series/observations?series_id={series_id}"
         f"&api_key={FRED_KEY}&file_type=json&limit=1&sort_order=desc"
-    ))
+    " + r").then(r=>r.text()))
     o = obs['observations'][0]
     return series_id, o['date'], o['value']
 
@@ -198,10 +206,10 @@ import json, os
 FRED_KEY = os.environ["FRED_KEY"]
 BASE = "https://api.stlouisfed.org/fred"
 
-obs = json.loads(http_get(
+obs = json.loads(await js('fetch(" + r"
     f"{BASE}/series/observations?series_id=DGS10&api_key={FRED_KEY}&file_type=json"
     f"&observation_start=2024-01-01&sort_order=asc"
-))
+" + r").then(r=>r.text()))
 
 data = [
     (o['date'], float(o['value']))
@@ -219,7 +227,7 @@ print(f"Last:  {data[-1]}")  # ('2026-04-17', 4.34)
 import urllib.error, json
 
 try:
-    r = http_get(f"https://api.stlouisfed.org/fred/series?series_id=BADID&api_key={FRED_KEY}&file_type=json")
+    r = await js('fetch(" + r"f"https://api.stlouisfed.org/fred/series?series_id=BADID&api_key={FRED_KEY}&file_type=json"" + r").then(r=>r.text())
     print(json.loads(r))
 except urllib.error.HTTPError as e:
     err = json.loads(e.read().decode())
@@ -237,11 +245,11 @@ Bureau of Labor Statistics. Covers unemployment, CPI, payrolls — the most-quer
 ```python
 import json
 # Single series GET — no auth needed
-r = http_get("https://api.bls.gov/publicAPI/v2/timeseries/data/LNS14000000?startyear=2024&endyear=2024")
+r = await js('fetch(" + r""https://api.bls.gov/publicAPI/v2/timeseries/data/LNS14000000?startyear=2024&endyear=2024"" + r").then(r=>r.text())
 data = json.loads(r)
 # data['status'] == 'REQUEST_SUCCEEDED'
 series = data['Results']['series'][0]
-for point in series['data'][:3]:
+async for point in series['data'][:3]:
     print(f"{point['year']}-{point['period']} ({point['periodName']}): {point['value']}")
 # 2024-M12 (December): 4.1
 # 2024-M11 (November): 4.2
@@ -268,7 +276,7 @@ req = urllib.request.Request(
 with urllib.request.urlopen(req, timeout=20) as resp:
     data = json.loads(resp.read().decode())
 
-for s in data['Results']['series']:
+async for s in data['Results']['series']:
     pts = s['data']
     print(f"{s['seriesID']}: {len(pts)} points, latest={pts[0]['value']}")
 # LNS14000000: 24 points, latest=4.1   (unemployment %)
@@ -307,12 +315,12 @@ Free, no registration, no rate limit observed (10 rapid calls completed in 2.0s)
 import json
 
 # Single country, single indicator
-r = http_get("https://api.worldbank.org/v2/country/US/indicator/NY.GDP.MKTP.CD?format=json&per_page=5&mrv=5")
+r = await js('fetch(" + r""https://api.worldbank.org/v2/country/US/indicator/NY.GDP.MKTP.CD?format=json&per_page=5&mrv=5"" + r").then(r=>r.text())
 data = json.loads(r)
 page_info = data[0]   # {'page': 1, 'pages': 1, 'per_page': 5, 'total': 5, 'lastupdated': '2026-04-08'}
 items     = data[1]   # list of observations
 
-for item in items:
+async for item in items:
     if item['value']:
         print(f"{item['date']}: ${item['value']/1e12:.2f}T")
 # 2024: $28.75T
@@ -326,10 +334,10 @@ for item in items:
 import json
 
 # Historical range: date=YYYY:YYYY
-r = http_get("https://api.worldbank.org/v2/country/US/indicator/FP.CPI.TOTL.ZG?format=json&date=2015:2024&per_page=15")
+r = await js('fetch(" + r""https://api.worldbank.org/v2/country/US/indicator/FP.CPI.TOTL.ZG?format=json&date=2015:2024&per_page=15"" + r").then(r=>r.text())
 data = json.loads(r)
 items = [i for i in data[1] if i['value'] is not None]
-for item in items:
+async for item in items:
     print(f"{item['date']}: {item['value']:.2f}%")
 # 2024: 2.95%
 # 2023: 4.12%
@@ -337,10 +345,10 @@ for item in items:
 # ...
 
 # Multi-country: semicolon-separated ISO codes
-r = http_get("https://api.worldbank.org/v2/country/US;CN;DE;JP;GB/indicator/NY.GDP.MKTP.CD?format=json&date=2023&per_page=10")
+r = await js('fetch(" + r""https://api.worldbank.org/v2/country/US;CN;DE;JP;GB/indicator/NY.GDP.MKTP.CD?format=json&date=2023&per_page=10"" + r").then(r=>r.text())
 data = json.loads(r)
-items = sorted([i for i in data[1] if i['value']], key=lambda x: x['value'], reverse=True)
-for item in items:
+items = sorted([i async for i in data[1] if i['value']], key=lambda x: x['value'], reverse=True)
+async for item in items:
     print(f"{item['country']['value']}: ${item['value']/1e12:.2f}T")
 # United States: $27.29T
 # China: $18.27T
@@ -370,7 +378,7 @@ import json
 AV_KEY = "demo"  # or your registered key
 
 # Unemployment rate (works with demo key — confirmed)
-r = http_get(f"https://www.alphavantage.co/query?function=UNEMPLOYMENT&apikey={AV_KEY}")
+r = await js('fetch(" + r"f"https://www.alphavantage.co/query?function=UNEMPLOYMENT&apikey={AV_KEY}"" + r").then(r=>r.text())
 data = json.loads(r)
 # data['name']  = 'Unemployment Rate'
 # data['interval'] = 'monthly'
@@ -403,16 +411,16 @@ import json
 AV_KEY = "YOUR_FREE_KEY"  # from alphavantage.co/support/#api-key
 
 # Federal Funds Rate — monthly (requires registered key)
-r = http_get(f"https://www.alphavantage.co/query?function=FEDERAL_FUNDS_RATE&interval=monthly&apikey={AV_KEY}")
+r = await js('fetch(" + r"f"https://www.alphavantage.co/query?function=FEDERAL_FUNDS_RATE&interval=monthly&apikey={AV_KEY}"" + r").then(r=>r.text())
 data = json.loads(r)
-for item in data['data'][:3]:
+async for item in data['data'][:3]:
     print(f"{item['date']}: {item['value']}%")
 # 2026-03-01: 4.33%
 # 2026-02-01: 4.33%
 # 2026-01-01: 4.33%
 
 # 10-Year Treasury Yield
-r = http_get(f"https://www.alphavantage.co/query?function=TREASURY_YIELD&maturity=10year&interval=monthly&apikey={AV_KEY}")
+r = await js('fetch(" + r"f"https://www.alphavantage.co/query?function=TREASURY_YIELD&maturity=10year&interval=monthly&apikey={AV_KEY}"" + r").then(r=>r.text())
 data = json.loads(r)
 print(data['data'][0])   # {'date': '2026-04-17', 'value': '4.34'}
 ```
@@ -425,8 +433,8 @@ When you need data from `fred.stlouisfed.org` that has no API equivalent (custom
 
 ```python
 # Navigate to a series page
-goto("https://fred.stlouisfed.org/series/GDP")
-wait_for_load()
+await goto("https://fred.stlouisfed.org/series/GDP")
+await wait_for_load()
 
 # Option 1: Intercept the fredgraph XHR that the chart fires
 # The page's chart JS calls fredgraph.csv internally — intercept it
@@ -434,14 +442,14 @@ events = drain_events()
 # Look for network events with fredgraph.csv in URL
 
 # Option 2: Extract the latest value from the page text
-latest_val = js("""
+latest_val = await js("""
     // The last observation appears in the meta section
     const el = document.querySelector('.series-meta-observation-end');
     el ? el.textContent.trim() : null
 """)
 
 # Option 3: Read the data table if present
-table_data = js("""
+table_data = await js("""
     const rows = Array.from(document.querySelectorAll('table.series-observations tr'));
     rows.map(r => {
         const cells = r.querySelectorAll('td');

@@ -1,4 +1,12 @@
-# Trello — boards and lists
+# 
+> **Adapted from browser-harness to camoufox-harness (Playwright API)**
+>
+> Original browser-harness code used CDP/sync calls. This has been adapted to use Playwright async API.
+>
+> If you find issues, check `helpers.py` for available functions.
+
+
+Trello — boards and lists
 
 Read-only pattern for Trello: land on a board URL, scrape lists and their
 cards. Works for signed-in agents that inherit Tom's Chrome session —
@@ -37,18 +45,18 @@ matches the visible column count.
 
 ## Framework / interaction quirks
 
-- `goto('https://trello.com/')` redirects asynchronously to the user's
-  boards dashboard. After `wait_for_load()`, the URL in `page_info()`
+- `await goto('https://trello.com/')` redirects asynchronously to the user's
+  boards dashboard. After `await wait_for_load()`, the URL in `await page_info()`
   will be `.../u/<username>/boards`. Don't hard-code the username;
-  read it back from `page_info()['url']` if you need it.
+  read it back from `await page_info()['url']` if you need it.
 - On initial load the board's lists can take ~1-2 s to render after
-  `wait_for_load()` returns. A brief `time.sleep(2)` before scraping is
+  `await wait_for_load()` returns. A brief `time.sleep(2)` before scraping is
   reliable; alternatively, wait for `[data-testid="list"]` to be
   present with a count > 0.
 
 ## Waits
 
-- `wait_for_load()` on the board URL returns before all lists/cards are
+- `await wait_for_load()` on the board URL returns before all lists/cards are
   in the DOM. The list containers appear first (empty), then cards
   populate. Wait for a non-zero card count inside a list before
   declaring "done".
@@ -77,7 +85,7 @@ matches the visible column count.
   })))()
 ```
 
-Wrap in `js(...)` + `json.loads()` and you have structured board data
+Wrap in `await js(...)` + `json.loads()` and you have structured board data
 in one round trip.
 
 ## What NOT to capture here

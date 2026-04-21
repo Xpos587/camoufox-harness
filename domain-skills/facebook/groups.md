@@ -1,4 +1,12 @@
-# Facebook Groups — mining feeds for posts + external URLs
+# 
+> **Adapted from browser-harness to camoufox-harness (Playwright API)**
+>
+> Original browser-harness code used CDP/sync calls. This has been adapted to use Playwright async API.
+>
+> If you find issues, check `helpers.py` for available functions.
+
+
+Facebook Groups — mining feeds for posts + external URLs
 
 Field-tested against a logged-in Jay account on 2026-04-18.
 **Requires:** Browser Harness driving a real Chrome that is (a) signed into
@@ -57,8 +65,8 @@ seen = {}  # post_url -> dict
 TARGET = 50  # how many posts to collect
 MAX_SCROLLS = 30
 
-for i in range(MAX_SCROLLS):
-    new_posts = js("""
+async for i in range(MAX_SCROLLS):
+    new_posts = await js("""
       Array.from(document.querySelectorAll('div[role="article"]')).map(el => {
         const link = el.querySelector('a[href*="/groups/"][href*="/posts/"], a[href*="/groups/"][href*="/permalink/"]');
         const body = el.querySelector('div[data-ad-preview="message"], div[data-ad-comet-preview="message"]');
@@ -75,15 +83,15 @@ for i in range(MAX_SCROLLS):
         };
       }).filter(p => p.url)
     """) or []
-    for p in new_posts:
+    async for p in new_posts:
         seen.setdefault(p["url"], p)
     if len(seen) >= TARGET:
         break
     scroll(640, 400, dy=900)  # scroll near middle of viewport
-    wait(2.5)  # FB needs ~2s to render new batch + a little buffer
+    await wait(2.5)  # FB needs ~2s to render new batch + a little buffer
 ```
 
-`wait(2.5)` is the floor. Faster than that and you'll see empty post containers
+`await wait(2.5)` is the floor. Faster than that and you'll see empty post containers
 because React hasn't hydrated them yet.
 
 
@@ -110,8 +118,8 @@ shines here because you want typed results across heterogeneous sources.
 ```python
 # After the scroll loop:
 external_urls = []
-for p in seen.values():
-    for raw in p["externals"]:
+async for p in seen.values():
+    async for raw in p["externals"]:
         external_urls.append(decode_fb_link(raw))
 external_urls = sorted(set(external_urls))
 print(f"harvested {len(external_urls)} unique external URLs")
@@ -124,7 +132,7 @@ print(f"harvested {len(external_urls)} unique external URLs")
 #   )
 ```
 
-When Firecrawl isn't available or the pages are simple, `http_get(url)` from
+When Firecrawl isn't available or the pages are simple, `await js('fetch(" + r"url" + r").then(r=>r.text())` from
 Harness itself is fine — it does a plain HTTP fetch without a browser, works
 for static pages, and is the fastest option for bulk.
 
@@ -135,7 +143,7 @@ FB notices automation patterns at the account level, not the IP level. Driving
 a real logged-in session means Jay's account is the one getting rate-limited if
 you get greedy. Keep these floors:
 
-- **≥2 seconds between scrolls** in the collect loop (the `wait(2.5)` above)
+- **≥2 seconds between scrolls** in the collect loop (the `await wait(2.5)` above)
 - **≥3 seconds between groups** if you're sweeping multiple
 - **No more than ~6 groups per hour** for sustained monitoring
 - **Don't open the same group more than every 15 minutes** — repeated visits
@@ -152,7 +160,7 @@ Paste this into a Harness stdin block to see what anchors currently exist in the
 visible feed. Run it on a group you're a member of.
 
 ```python
-print(js("""
+print(await js("""
   ({
     articles: document.querySelectorAll('div[role="article"]').length,
     body_preview_a: document.querySelectorAll('div[data-ad-preview="message"]').length,
@@ -179,18 +187,18 @@ GROUP = "riceLakeBoating"          # slug or numeric id
 TARGET = 50                         # how many posts to collect
 MAX_SCROLLS = 30
 
-goto(f"https://www.facebook.com/groups/{GROUP}/?sorting_setting=CHRONOLOGICAL")
-wait_for_load()
-wait(2)
+await goto(f"https://www.facebook.com/groups/{GROUP}/?sorting_setting=CHRONOLOGICAL")
+await wait_for_load()
+await wait(2)
 
 # Abort if FB bounced us
-info = page_info()
+info = await page_info()
 if "/checkpoint/" in info["url"] or "/login" in info["url"]:
     sys.exit("AUTH_WALL — stop and have Jay re-verify the account.")
 
 seen = {}
-for _ in range(MAX_SCROLLS):
-    batch = js("""
+async for _ in range(MAX_SCROLLS):
+    batch = await js("""
       Array.from(document.querySelectorAll('div[role="article"]')).map(el => {
         const link = el.querySelector('a[href*="/groups/"][href*="/posts/"], a[href*="/groups/"][href*="/permalink/"]');
         const body = el.querySelector('div[data-ad-preview="message"], div[data-ad-comet-preview="message"]');
@@ -201,12 +209,12 @@ for _ in range(MAX_SCROLLS):
                  body: body?.innerText?.slice(0, 4000), externals };
       }).filter(p => p.url)
     """) or []
-    for p in batch:
+    async for p in batch:
         seen.setdefault(p["url"], p)
     if len(seen) >= TARGET:
         break
     scroll(640, 400, dy=900)
-    wait(2.5)
+    await wait(2.5)
 
 def decode(u):
     if not u.startswith("https://l.facebook.com/l.php"): return u
@@ -215,7 +223,7 @@ def decode(u):
 
 posts = list(seen.values())
 all_externals = sorted({decode(x) for p in posts for x in p["externals"]})
-screenshot(f"/tmp/fb-group-{GROUP}.png", full=True)
+await screenshot(f"/tmp/fb-group-{GROUP}.png", full=True)
 print(json.dumps({
     "group": GROUP,
     "post_count": len(posts),

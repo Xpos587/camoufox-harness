@@ -1,4 +1,12 @@
-# Booking.com — Scraping & Data Extraction
+# 
+> **Adapted from browser-harness to camoufox-harness (Playwright API)**
+>
+> Original browser-harness code used CDP/sync calls. This has been adapted to use Playwright async API.
+>
+> If you find issues, check `helpers.py` for available functions.
+
+
+Booking.com — Scraping & Data Extraction
 
 Field-tested against booking.com on 2026-04-18 using `http_get` and the
 `dml/graphql` JSON API. All tests run without a browser session.
@@ -86,7 +94,7 @@ GOOGLEBOT = {"User-Agent": "Googlebot/2.1 (+http://www.google.com/bot.html)"}
 
 def fetch_sitemap_index(url: str) -> list[str]:
     """Returns list of child sitemap URLs from an index sitemap."""
-    xml = http_get(url, headers=GOOGLEBOT)
+    xml = await js('fetch(" + r"url, headers=GOOGLEBOT" + r").then(r=>r.text())
     return re.findall(r'<loc>(https://[^<]+)</loc>', xml)
 
 def fetch_sitemap_gz(gz_url: str) -> list[str]:
@@ -97,10 +105,10 @@ def fetch_sitemap_gz(gz_url: str) -> list[str]:
     return re.findall(r'<loc>(https://[^<]+)</loc>', data.decode())
 
 # Example: get all en-gb hotel URLs
-hotel_idx = http_get(
+hotel_idx = await js('fetch(" + r"
     "https://www.booking.com/sitembk-hotel-index.xml",
     headers=GOOGLEBOT
-)
+" + r").then(r=>r.text())
 # 74 shards for en-gb; each shard has ~45,000-50,000 property URLs
 en_gb_shards = re.findall(
     r'<loc>(https://www\.booking\.com/sitembk-hotel-en-gb\.\d+\.xml\.gz)</loc>',
@@ -124,7 +132,7 @@ en_gb_shards = re.findall(
 ### 2. `robots.txt`
 
 ```python
-robots = http_get("https://www.booking.com/robots.txt", headers={"User-Agent": "Mozilla/5.0"})
+robots = await js('fetch(" + r""https://www.booking.com/robots.txt", headers={"User-Agent": "Mozilla/5.0"}" + r").then(r=>r.text())
 ```
 
 - Returns immediately, no WAF.
@@ -280,16 +288,16 @@ Since `http_get` is blocked, all actual data extraction requires the browser
 ### Initial Navigation
 
 ```python
-# Always use new_tab() for the first Booking.com load in a session
-tid = new_tab("https://www.booking.com/searchresults.html?ss=Paris&checkin=2026-05-01&checkout=2026-05-03&group_adults=2&no_rooms=1&selected_currency=USD")
-wait_for_load()
-wait(3)  # React hydration takes ~3s after readyState=complete
+# Always use await new_tab() for the first Booking.com load in a session
+tid = await new_tab("https://www.booking.com/searchresults.html?ss=Paris&checkin=2026-05-01&checkout=2026-05-03&group_adults=2&no_rooms=1&selected_currency=USD")
+await wait_for_load()
+await wait(3)  # React hydration takes ~3s after readyState=complete
 
 # Check for WAF challenge still running (rare in real Chrome)
-url = page_info()["url"]
+url = await page_info()["url"]
 if "chal_t=" in url:
-    wait(5)  # WAF challenge resolving
-    wait_for_load()
+    await wait(5)  # WAF challenge resolving
+    await wait_for_load()
 ```
 
 ### GDPR / Cookie Consent Banner (EU Visitors)
@@ -300,12 +308,12 @@ the WAF challenge resolves. It blocks interaction until dismissed.
 ```python
 def dismiss_cookie_banner():
     # Booking.com uses data-testid="accept" on the Accept button
-    accepted = js("""
+    accepted = await js("""
         (function() {
             var btn = document.querySelector('[data-testid="accept"]')
                    || document.querySelector('#onetrust-accept-btn-handler')
                    || document.querySelector('[aria-label*="Accept"]');
-            if (btn) { btn.click(); return true; }
+            if (btn) { btn.await click(); return true; }
             return false;
         })()
     """)
@@ -313,7 +321,7 @@ def dismiss_cookie_banner():
 
 # Call immediately after load if you have an EU IP
 if dismiss_cookie_banner():
-    wait(1)
+    await wait(1)
 ```
 
 The consent banner does **not** appear in the WAF stub — it only renders after
@@ -323,7 +331,7 @@ may not see it at all.
 ### Search Results Page Extraction
 
 ```python
-results = js("""
+results = await js("""
   Array.from(document.querySelectorAll('[data-testid="property-card"]')).map(el => ({
     name: el.querySelector('[data-testid="title"]')?.innerText?.trim(),
     url: el.querySelector('[data-testid="title-link"]')?.href,
@@ -346,31 +354,31 @@ results = js("""
   `"9.2"`) and the label (e.g., `"Superb"`); use `.split('\n')[0]` for score.
 - `data-testid="rating-stars"` — star rating icons; count SVG children for
   star count.
-- Results are loaded asynchronously; 3s wait after `wait_for_load()` is
+- Results are loaded asynchronously; 3s wait after `await wait_for_load()` is
   required for all cards to render.
 
 ### Pagination
 
 ```python
 # Method 1: Next page button
-next_btn = js("document.querySelector('[data-testid=\"pagination-next\"]')?.href")
+next_btn = await js("document.querySelector('[data-testid=\"pagination-next\"]')?.href")
 if next_btn:
-    goto(next_btn)
-    wait_for_load()
-    wait(3)
+    await goto(next_btn)
+    await wait_for_load()
+    await wait(3)
 
 # Method 2: Offset parameter (25 results per page)
-current_url = page_info()["url"]
+current_url = await page_info()["url"]
 offset = 25  # next page
-goto(current_url + f"&offset={offset}")
-wait_for_load()
-wait(3)
+await goto(current_url + f"&offset={offset}")
+await wait_for_load()
+await wait(3)
 ```
 
 ### Property / Hotel Page Extraction
 
 ```python
-detail = js("""
+detail = await js("""
   ({
     name: document.querySelector('[data-testid="property-name"]')?.innerText?.trim()
        || document.querySelector('h2.hp__hotel-name, h1.pp-hotel-name-title')?.innerText?.trim(),
@@ -404,7 +412,7 @@ Property pages embed JSON-LD when fully rendered in browser. The schema type
 is `Hotel`:
 
 ```python
-ld_json = js("""
+ld_json = await js("""
   (function() {
     for (var s of document.querySelectorAll('script[type="application/ld+json"]')) {
       try {
@@ -435,8 +443,8 @@ Booking.com's React app may embed search state in `window.__NEXT_DATA__` or
 legacy `b_hotel_data` globals. Access via:
 
 ```python
-next_data = js("window.__NEXT_DATA__")    # dict or None
-b_hotel   = js("window.b_hotel_data")    # dict or None — legacy pages
+next_data = await js("window.__NEXT_DATA__")    # dict or None
+b_hotel   = await js("window.b_hotel_data")    # dict or None — legacy pages
 ```
 
 These globals are not present in the WAF stub and their availability depends
@@ -449,7 +457,7 @@ on page version. Prefer data-testid selectors which are more stable.
 Booking.com shows prices per night with multiple formatting variants:
 
 ```python
-price_patterns = js("""
+price_patterns = await js("""
   ({
     // Search results card price
     search_price: document.querySelector('[data-testid="price-and-discounted-price"]')?.innerText,
@@ -485,8 +493,8 @@ something went wrong:
 
 ```python
 def check_booking_waf():
-    url = page_info()["url"]
-    html_snippet = js("document.body?.innerHTML?.slice(0, 500)") or ""
+    url = await page_info()["url"]
+    html_snippet = await js("document.body?.innerHTML?.slice(0, 500)") or ""
     return (
         "chal_t=" in url
         or "AwsWafIntegration" in html_snippet
@@ -499,14 +507,14 @@ def wait_past_waf(timeout=15):
     while time.time() < deadline:
         if not check_booking_waf():
             return True
-        wait(1)
+        await wait(1)
     return False  # timed out — WAF didn't resolve
 
-# Use after goto():
-goto("https://www.booking.com/searchresults.html?ss=London&checkin=2026-06-01&checkout=2026-06-03&group_adults=2&no_rooms=1")
-wait_for_load()
+# Use after await goto():
+await goto("https://www.booking.com/searchresults.html?ss=London&checkin=2026-06-01&checkout=2026-06-03&group_adults=2&no_rooms=1")
+await wait_for_load()
 wait_past_waf()
-wait(2)  # hydration
+await wait(2)  # hydration
 ```
 
 ---
@@ -524,12 +532,12 @@ GOOGLEBOT = {"User-Agent": "Googlebot/2.1 (+http://www.google.com/bot.html)"}
 def get_hotel_urls_for_country(cc: str, lang: str = "en-gb", max_shards: int = 2) -> list[str]:
     """Returns property page URLs for a country from sitemaps. No browser needed."""
     idx_url = f"https://www.booking.com/sitembk-hotel-index.xml"
-    idx = http_get(idx_url, headers=GOOGLEBOT)
+    idx = await js('fetch(" + r"idx_url, headers=GOOGLEBOT" + r").then(r=>r.text())
     pattern = rf'<loc>(https://www\.booking\.com/sitembk-hotel-{lang}\.\d+\.xml\.gz)</loc>'
     shards = re.findall(pattern, idx)[:max_shards]
     
     urls = []
-    for shard_url in shards:
+    async for shard_url in shards:
         req = urllib.request.Request(shard_url, headers=GOOGLEBOT)
         with urllib.request.urlopen(req, timeout=60) as r:
             xml = gzip.decompress(r.read()).decode()
@@ -561,8 +569,8 @@ def get_hotel_urls_for_country(cc: str, lang: str = "en-gb", max_shards: int = 2
 - **GDPR consent banner**: shown after WAF resolves, before React renders
   search results. Must be dismissed (click `[data-testid="accept"]`) before
   interacting with EU sessions. Non-EU IPs may not see it.
-- **React hydration delay**: `wait_for_load()` fires before card data renders.
-  Always add 2-3s of `wait()` after `wait_for_load()`.
+- **React hydration delay**: `await wait_for_load()` fires before card data renders.
+  Always add 2-3s of `await wait()` after `await wait_for_load()`.
 - **`sr-hotel` class is legacy** — Booking.com migrated to data-testid
   attributes. Use `[data-testid="property-card"]`, not `.sr-hotel`.
 - **Price parsing**: the price element often contains the full string

@@ -1,4 +1,12 @@
-# TradingView — Scraping & Data Extraction
+# 
+> **Adapted from browser-harness to camoufox-harness (Playwright API)**
+>
+> Original browser-harness code used CDP/sync calls. This has been adapted to use Playwright async API.
+>
+> If you find issues, check `helpers.py` for available functions.
+
+
+TradingView — Scraping & Data Extraction
 
 `https://www.tradingview.com` — charting platform with multiple internal REST APIs. Stock/crypto/forex screener and symbol search work without auth. Use `http_get` or raw `urllib` for all workflows except JS-rendered chart pages.
 
@@ -51,7 +59,7 @@ with urllib.request.urlopen(req, timeout=20) as r:
 # "d" values align positionally with "columns" in the payload
 
 cols = payload["columns"]
-for item in resp["data"]:
+async for item in resp["data"]:
     row = dict(zip(cols, item["d"]))
     symbol = item["s"]   # e.g. "NASDAQ:AAPL"
     print(symbol, row["close"], row["change"], row["market_cap_basic"])
@@ -302,8 +310,8 @@ The charting UI (`/chart/`), symbol detail pages (`/symbols/NASDAQ-AAPL/`), and 
 
 ```python
 # Only if you need a chart screenshot:
-goto("https://www.tradingview.com/chart/?symbol=NASDAQ:AAPL")
-wait_for_load()
-wait(3)   # chart renders asynchronously after readyState
-screenshot("/tmp/aapl_chart.png", full=False)
+await goto("https://www.tradingview.com/chart/?symbol=NASDAQ:AAPL")
+await wait_for_load()
+await wait(3)   # chart renders asynchronously after readyState
+await screenshot("/tmp/aapl_chart.png", full=False)
 ```

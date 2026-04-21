@@ -1,4 +1,12 @@
-# Craigslist — Scraping via http_get
+# 
+> **Adapted from browser-harness to camoufox-harness (Playwright API)**
+>
+> Original browser-harness code used CDP/sync calls. This has been adapted to use Playwright async API.
+>
+> If you find issues, check `helpers.py` for available functions.
+
+
+Craigslist — Scraping via http_get
 
 Field-tested against sfbay.craigslist.org and multiple city subdomains on 2026-04-18.
 `http_get` works without any bot detection — no CAPTCHA, no block, no rate limit observed.
@@ -144,7 +152,7 @@ def search_craigslist(city, category, query, min_price=None, max_price=None):
     if max_price: params += f"&max_price={max_price}"
     url = f"https://{city}.craigslist.org/search/{category}?{params}"
     headers = {"User-Agent": "Mozilla/5.0"}
-    html = http_get(url, headers=headers)
+    html = await js('fetch(" + r"url, headers=headers" + r").then(r=>r.text())
 
     listings = re.findall(
         r'<li class="cl-static-search-result" title="([^"]+)"[^>]*>\s*'
@@ -168,7 +176,7 @@ def search_craigslist(city, category, query, min_price=None, max_price=None):
 
 # Usage
 results = search_craigslist("sfbay", "sss", "macbook pro", max_price=1000)
-for r in results[:5]:
+async for r in results[:5]:
     print(r["post_id"], r["price"], r["location"], r["title"][:50])
 ```
 
@@ -180,7 +188,7 @@ for `price`; the example converts that to `None`. A more robust extraction:
 ```python
 def parse_listings(html):
     results = []
-    for block in re.findall(r'<li class="cl-static-search-result"(.*?)</li>', html, re.DOTALL):
+    async for block in re.findall(r'<li class="cl-static-search-result"(.*?)</li>', html, re.DOTALL):
         title = re.search(r'title="([^"]+)"', block)
         url   = re.search(r'href="([^"]+)"', block)
         price = re.search(r'<div class="price">([^<]+)</div>', block)
@@ -205,7 +213,7 @@ Listing pages are also fully server-rendered. All fields are present in the raw 
 ```python
 def get_listing(url):
     headers = {"User-Agent": "Mozilla/5.0"}
-    html = http_get(url, headers=headers)
+    html = await js('fetch(" + r"url, headers=headers" + r").then(r=>r.text())
 
     title    = re.search(r'<span id="titletextonly">([^<]+)</span>', html)
     price    = re.search(r'<span class="price">(\$[\d,]+)</span>', html)
@@ -286,13 +294,13 @@ structured data (price as float, geo coordinates) without regex parsing of HTML:
 import json, re
 from helpers import http_get
 
-html = http_get("https://sfbay.craigslist.org/search/sss?query=laptop", headers={"User-Agent": "Mozilla/5.0"})
+html = await js('fetch(" + r""https://sfbay.craigslist.org/search/sss?query=laptop", headers={"User-Agent": "Mozilla/5.0"}" + r").then(r=>r.text())
 ld_blocks = re.findall(r'<script type="application/ld\+json"[^>]*>(.*?)</script>', html, re.DOTALL)
 
-for raw in ld_blocks:
+async for raw in ld_blocks:
     data = json.loads(raw)
     if data.get('@type') == 'ItemList':
-        for item in data['itemListElement']:
+        async for item in data['itemListElement']:
             listing = item['item']
             print(
                 listing.get('name'),
@@ -329,7 +337,7 @@ over_500  = search_craigslist("sfbay", "sss", "macbook", min_price=501)
 ```
 
 If true pagination is required (e.g. you need more than 350 results), you must use a browser session
-with `goto()` + `wait_for_load()`.
+with `await goto()` + `await wait_for_load()`.
 
 ## Bot detection
 

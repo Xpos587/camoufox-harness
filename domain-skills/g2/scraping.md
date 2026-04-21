@@ -1,4 +1,12 @@
-# G2 — B2B Software Reviews
+# 
+> **Adapted from browser-harness to camoufox-harness (Playwright API)**
+>
+> Original browser-harness code used CDP/sync calls. This has been adapted to use Playwright async API.
+>
+> If you find issues, check `helpers.py` for available functions.
+
+
+G2 — B2B Software Reviews
 
 Field-tested against g2.com on 2026-04-18.
 
@@ -23,7 +31,7 @@ DataDome's challenge is **silent** — no CAPTCHA widget appears in a real brows
 
 Pages **not** behind DataDome (safe to `http_get`): `help.g2.com`, `research.g2.com`, `learn.g2.com`, `data.g2.com/api/docs`.
 
-**Use `goto()` + `wait()` exclusively. Never use `http_get` for www.g2.com.**
+**Use `await goto()` + `await wait()` exclusively. Never use `http_get` for www.g2.com.**
 
 ---
 
@@ -69,7 +77,7 @@ while True:
     reviews = batch["data"]
     if not reviews:
         break
-    for r in reviews:
+    async for r in reviews:
         a = r["attributes"]
         all_reviews.append({
             "id":           r["id"],
@@ -142,22 +150,22 @@ slug              URL slug for the individual review
 ### Setup: open in new tab, wait for DataDome to clear
 
 ```python
-new_tab("https://www.g2.com/products/slack/reviews")
-wait_for_load()
-wait(5)  # DataDome JS fingerprinting runs 2-4s after readyState=complete
+await new_tab("https://www.g2.com/products/slack/reviews")
+await wait_for_load()
+await wait(5)  # DataDome JS fingerprinting runs 2-4s after readyState=complete
 ```
 
-`wait(5)` is mandatory. Extracting before it completes returns empty or blocked content.
+`await wait(5)` is mandatory. Extracting before it completes returns empty or blocked content.
 
 Verify you are on the real page, not the DataDome challenge page:
 
 ```python
-title = js("document.title")
-url_now = page_info()["url"]
+title = await js("document.title")
+url_now = await page_info()["url"]
 if "g2.com" not in url_now or "captcha-delivery.com" in url_now:
-    wait(5)
-    title = js("document.title")
-    url_now = page_info()["url"]
+    await wait(5)
+    title = await js("document.title")
+    url_now = await page_info()["url"]
     assert "captcha-delivery.com" not in url_now, f"Still on DataDome challenge: {url_now}"
 ```
 
@@ -186,11 +194,11 @@ G2 is a **Rails app** (not Next.js) — there is no `__NEXT_DATA__`. Use schema.
 ```python
 import json
 
-goto("https://www.g2.com/products/slack/reviews")
-wait_for_load()
-wait(5)
+await goto("https://www.g2.com/products/slack/reviews")
+await wait_for_load()
+await wait(5)
 
-summary = js("""
+summary = await js("""
 (function() {
   // Schema.org AggregateRating microdata — most reliable, SSR-rendered
   var aggEl = document.querySelector('[itemtype*="AggregateRating"]');
@@ -229,11 +237,11 @@ The rating distribution histogram (5-star, 4-star, …) is rendered server-side 
 ```python
 import json
 
-goto("https://www.g2.com/products/slack/reviews")
-wait_for_load()
-wait(5)
+await goto("https://www.g2.com/products/slack/reviews")
+await wait_for_load()
+await wait(5)
 
-dist = js("""
+dist = await js("""
 (function() {
   // G2 renders star distribution in a table or bar list
   // Selector targets the rating breakdown rows
@@ -269,7 +277,7 @@ dist = js("""
 """)
 
 distribution = json.loads(dist)
-for star in ["5", "4", "3", "2", "1"]:
+async for star in ["5", "4", "3", "2", "1"]:
     d = distribution.get(star, {})
     print(f"{star}★: {d.get('pct','?')} ({d.get('count','?')})")
 ```
@@ -277,7 +285,7 @@ for star in ["5", "4", "3", "2", "1"]:
 If the distribution returns empty, take a screenshot and inspect the actual element structure:
 
 ```python
-screenshot("/tmp/g2_reviews.png")
+await screenshot("/tmp/g2_reviews.png")
 # Inspect the image, then adjust selectors above
 ```
 
@@ -290,12 +298,12 @@ G2 renders reviews server-side as schema.org `Review` microdata items. Extract b
 ```python
 import json
 
-goto("https://www.g2.com/products/slack/reviews")
-wait_for_load()
-wait(5)
+await goto("https://www.g2.com/products/slack/reviews")
+await wait_for_load()
+await wait(5)
 
 # Dismiss cookie consent banner (GDPR regions)
-dismissed = js("""
+dismissed = await js("""
 (function() {
   var btns = [
     '#onetrust-accept-btn-handler',
@@ -305,15 +313,15 @@ dismissed = js("""
   ];
   for (var i = 0; i < btns.length; i++) {
     var b = document.querySelector(btns[i]);
-    if (b && b.offsetParent !== null) { b.click(); return btns[i]; }
+    if (b && b.offsetParent !== null) { b.await click(); return btns[i]; }
   }
   return null;
 })()
 """)
 if dismissed:
-    wait(1)
+    await wait(1)
 
-reviews = js("""
+reviews = await js("""
 (function() {
   // Primary: schema.org Review microdata (SSR-rendered, stable)
   var cards = document.querySelectorAll(
@@ -367,7 +375,7 @@ reviews = js("""
 """)
 
 results = json.loads(reviews)
-for r in results:
+async for r in results:
     print(f"{r['stars']}★ | {r['title']} | {r['jobTitle']} | {r['date']}")
     if r['pros']:  print(f"  + {r['pros'][:120]}")
     if r['cons']:  print(f"  - {r['cons'][:120]}")
@@ -377,9 +385,9 @@ for r in results:
 **If `results` is empty:** G2 may have re-skinned. Take a screenshot and inspect the DOM:
 
 ```python
-screenshot("/tmp/g2_page.png")
+await screenshot("/tmp/g2_page.png")
 # Check element structure with:
-structure = js("""
+structure = await js("""
 (function() {
   // Dump first article/div with 'review' in its classes
   var el = document.querySelector(
@@ -403,16 +411,16 @@ import json
 slug = "slack"
 all_reviews = []
 
-for page_num in range(1, 6):  # up to 5 pages (~10 reviews each)
+async for page_num in range(1, 6):  # up to 5 pages (~10 reviews each)
     url = f"https://www.g2.com/products/{slug}/reviews?page={page_num}"
     if page_num == 1:
-        goto(url)
+        await goto(url)
     else:
-        goto(url)
-    wait_for_load()
-    wait(4 if page_num == 1 else 2)  # DataDome only challenges on first page in session
+        await goto(url)
+    await wait_for_load()
+    await wait(4 if page_num == 1 else 2)  # DataDome only challenges on first page in session
 
-    batch_json = js("""
+    batch_json = await js("""
     (function() {
       var cards = document.querySelectorAll(
         '[itemtype*="schema.org/Review"], [data-survey-id], [class*="ReviewCard"]'
@@ -453,11 +461,11 @@ print(f"Total: {len(all_reviews)} reviews")
 ```python
 import json
 
-goto("https://www.g2.com/categories/team-collaboration")
-wait_for_load()
-wait(5)
+await goto("https://www.g2.com/categories/team-collaboration")
+await wait_for_load()
+await wait(5)
 
-products = js("""
+products = await js("""
 (function() {
   // Product cards in category listing
   var cards = document.querySelectorAll(
@@ -484,7 +492,7 @@ products = js("""
 """)
 
 listing = json.loads(products)
-for p in listing:
+async for p in listing:
     print(f"{p['name']}: {p['rating']}★ ({p['reviews']} reviews)")
 ```
 
@@ -495,8 +503,8 @@ for p in listing:
 ```python
 def g2_is_datadome_blocked() -> bool:
     """True if DataDome challenge is still running (not on the real G2 page)."""
-    url_now = page_info()["url"]
-    title   = js("document.title") or ""
+    url_now = await page_info()["url"]
+    title   = await js("document.title") or ""
     return (
         "captcha-delivery.com" in url_now
         or "datadome" in url_now.lower()
@@ -504,14 +512,14 @@ def g2_is_datadome_blocked() -> bool:
     )
 
 # Usage
-new_tab("https://www.g2.com/products/slack/reviews")
-wait_for_load()
-wait(5)
+await new_tab("https://www.g2.com/products/slack/reviews")
+await wait_for_load()
+await wait(5)
 
 if g2_is_datadome_blocked():
-    wait(10)  # give DataDome JS extra time to complete
+    await wait(10)  # give DataDome JS extra time to complete
     if g2_is_datadome_blocked():
-        screenshot("/tmp/g2_dd_block.png")
+        await screenshot("/tmp/g2_dd_block.png")
         raise RuntimeError("DataDome challenge did not resolve — check screenshot")
 ```
 
@@ -524,7 +532,7 @@ A login modal appears after scrolling past ~5 reviews (triggered by scroll, not 
 ```python
 def dismiss_g2_login_modal():
     """Close G2's sign-in overlay. Safe to call if no modal is present."""
-    closed = js("""
+    closed = await js("""
     (function() {
       var selectors = [
         '[data-close-modal], [data-modal-close]',
@@ -537,7 +545,7 @@ def dismiss_g2_login_modal():
       for (var i = 0; i < selectors.length; i++) {
         var btn = document.querySelector(selectors[i]);
         if (btn && btn.offsetParent !== null) {
-          btn.click();
+          btn.await click();
           return selectors[i];
         }
       }
@@ -545,7 +553,7 @@ def dismiss_g2_login_modal():
     })()
     """)
     if closed:
-        wait(1)
+        await wait(1)
     return closed
 ```
 
@@ -559,7 +567,7 @@ Call `dismiss_g2_login_modal()` after any scroll action that might trigger the m
 
 - **DataDome does NOT block real Chrome via CDP.** The harness connects to Chrome via CDP. Chrome presents a genuine JA3 TLS fingerprint plus browser APIs (canvas, WebGL, Navigator). DataDome's fingerprinting sees a real browser and issues a valid `datadome` cookie silently (no CAPTCHA widget, no user action needed).
 
-- **`wait(5)` minimum after `wait_for_load()`.** DataDome's JS runs 2–4 seconds after `readyState='complete'`. The challenge page title is `"g2.com"` (not "G2 | Software Reviews..."). Checking `document.title` reliably distinguishes challenge from real page.
+- **`await wait(5)` minimum after `await wait_for_load()`.** DataDome's JS runs 2–4 seconds after `readyState='complete'`. The challenge page title is `"g2.com"` (not "G2 | Software Reviews..."). Checking `document.title` reliably distinguishes challenge from real page.
 
 - **G2 is a Rails app — no `__NEXT_DATA__`.** Unlike Next.js sites, G2 does NOT embed page data in a JSON script tag. All data must be extracted from the rendered HTML or via the official API. G2 uses Hotwire (Turbo + Stimulus) for frontend interactivity.
 
@@ -569,7 +577,7 @@ Call `dismiss_g2_login_modal()` after any scroll action that might trigger the m
 
 - **Sign-in modal triggers on scroll.** G2 limits anonymous visitors to the reviews visible in the initial viewport (~5 reviews). Scrolling triggers a login modal. Extract all initial cards before any scroll call. To get more reviews without login, use `?page=2`, `?page=3`, etc. instead of scrolling.
 
-- **Rate limiting on navigation.** G2 does not publish a browser-facing rate limit, but rapid consecutive `goto()` calls (< 2s apart) can trigger soft blocks. Use `wait(3)` between product page navigations and `wait(2)` between paginated review pages in the same session.
+- **Rate limiting on navigation.** G2 does not publish a browser-facing rate limit, but rapid consecutive `await goto()` calls (< 2s apart) can trigger soft blocks. Use `await wait(3)` between product page navigations and `await wait(2)` between paginated review pages in the same session.
 
 - **Cloudflare is CDN-only here, not Bot Management.** The `Server: cloudflare` header and `__cf_bm` cookie are standard Cloudflare CDN features (not the Cloudflare Bot Management product). The actual anti-bot protection is DataDome. Do not apply Glassdoor-style CF challenge waits — the DataDome wait is what matters.
 

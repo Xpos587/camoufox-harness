@@ -1,4 +1,12 @@
-# Job Boards — Indeed, Glassdoor, Stepstone
+# 
+> **Adapted from browser-harness to camoufox-harness (Playwright API)**
+>
+> Original browser-harness code used CDP/sync calls. This has been adapted to use Playwright async API.
+>
+> If you find issues, check `helpers.py` for available functions.
+
+
+Job Boards — Indeed, Glassdoor, Stepstone
 
 Covers: `indeed.com`, `glassdoor.com`, `stepstone.de`
 
@@ -13,25 +21,25 @@ from urllib.parse import quote_plus
 
 # Indeed — English (US)
 query, location = "Python developer", "San Francisco"
-goto(f"https://www.indeed.com/jobs?q={quote_plus(query)}&l={quote_plus(location)}")
-wait_for_load()
-wait(2)
+await goto(f"https://www.indeed.com/jobs?q={quote_plus(query)}&l={quote_plus(location)}")
+await wait_for_load()
+await wait(2)
 
 # Indeed — last 24 hours
-goto(f"https://www.indeed.com/jobs?q={quote_plus(query)}&l={quote_plus(location)}&fromage=1")
-wait_for_load()
-wait(2)
+await goto(f"https://www.indeed.com/jobs?q={quote_plus(query)}&l={quote_plus(location)}&fromage=1")
+await wait_for_load()
+await wait(2)
 
 # Glassdoor — public search (no login required for result cards)
-goto(f"https://www.glassdoor.com/Job/jobs.htm?sc.keyword={quote_plus(query)}")
-wait_for_load()
-wait(2)
+await goto(f"https://www.glassdoor.com/Job/jobs.htm?sc.keyword={quote_plus(query)}")
+await wait_for_load()
+await wait(2)
 
 # Stepstone (Germany)
 keyword, city = "Data Scientist", "Berlin"
-goto(f"https://www.stepstone.de/jobs/{quote_plus(keyword)}/in-{quote_plus(city)}.html")
-wait_for_load()
-wait(2)
+await goto(f"https://www.stepstone.de/jobs/{quote_plus(keyword)}/in-{quote_plus(city)}.html")
+await wait_for_load()
+await wait(2)
 ```
 
 ---
@@ -78,7 +86,7 @@ For Stepstone, keyword and city go directly in the path — encode spaces as `-`
 ```python
 kw_path = keyword.replace(" ", "-")
 city_path = city.replace(" ", "-")
-goto(f"https://www.stepstone.de/jobs/{kw_path}/in-{city_path}.html")
+await goto(f"https://www.stepstone.de/jobs/{kw_path}/in-{city_path}.html")
 ```
 
 ---
@@ -90,7 +98,7 @@ Indeed (EU/UK) and Glassdoor show GDPR consent overlays. Dismiss before extracti
 ```python
 def dismiss_cookie_banner():
     """Try common consent button patterns. Safe to call even if no banner is present."""
-    dismissed = js("""
+    dismissed = await js("""
     (function() {
       // Indeed: "Accept all cookies" button
       var selectors = [
@@ -107,7 +115,7 @@ def dismiss_cookie_banner():
       for (var i = 0; i < selectors.length; i++) {
         var btn = document.querySelector(selectors[i]);
         if (btn && btn.offsetParent !== null) {
-          btn.click();
+          btn.await click();
           return selectors[i];
         }
       }
@@ -115,18 +123,18 @@ def dismiss_cookie_banner():
     })()
     """)
     if dismissed:
-        wait(1)
+        await wait(1)
     return dismissed
 ```
 
-Call immediately after `wait_for_load()` on `.co.uk`, `.de`, or `glassdoor.com`:
+Call immediately after `await wait_for_load()` on `.co.uk`, `.de`, or `glassdoor.com`:
 
 ```python
-goto("https://www.indeed.co.uk/jobs?q=Python+developer&l=London")
-wait_for_load()
-wait(2)
+await goto("https://www.indeed.co.uk/jobs?q=Python+developer&l=London")
+await wait_for_load()
+await wait(2)
 dismiss_cookie_banner()
-wait(1)
+await wait(1)
 ```
 
 ---
@@ -140,12 +148,12 @@ import json
 from urllib.parse import quote_plus
 
 query, location = "machine learning engineer", "New York"
-goto(f"https://www.indeed.com/jobs?q={quote_plus(query)}&l={quote_plus(location)}")
-wait_for_load()
-wait(2)
+await goto(f"https://www.indeed.com/jobs?q={quote_plus(query)}&l={quote_plus(location)}")
+await wait_for_load()
+await wait(2)
 dismiss_cookie_banner()
 
-jobs = js("""
+jobs = await js("""
 (function() {
   // Cards live in <div data-jk="..."> or <li> with data-jk attribute
   var cards = document.querySelectorAll('[data-jk]');
@@ -187,7 +195,7 @@ jobs = js("""
 """)
 
 results = json.loads(jobs)
-for r in results:
+async for r in results:
     print(r)
 # Typically returns 10–15 cards per page
 ```
@@ -207,17 +215,17 @@ base_url = f"https://www.indeed.com/jobs?q={quote_plus(query)}&l={quote_plus(loc
 
 all_jobs = []
 
-for page in range(3):   # 3 pages = up to ~30 results
+async for page in range(3):   # 3 pages = up to ~30 results
     start = page * 10
     url = base_url if start == 0 else f"{base_url}&start={start}"
-    goto(url)
-    wait_for_load()
-    wait(2)   # mandatory — bot detection is aggressive on rapid loads
+    await goto(url)
+    await wait_for_load()
+    await wait(2)   # mandatory — bot detection is aggressive on rapid loads
 
     if page == 0:
         dismiss_cookie_banner()
 
-    batch_json = js("""
+    batch_json = await js("""
     (function() {
       var cards = document.querySelectorAll('[data-jk]');
       var out = [];
@@ -268,11 +276,11 @@ import json, re
 
 def get_indeed_job_detail(jk: str) -> dict:
     """Fetch full job details from an Indeed job key."""
-    goto(f"https://www.indeed.com/viewjob?jk={jk}")
-    wait_for_load()
-    wait(2)
+    await goto(f"https://www.indeed.com/viewjob?jk={jk}")
+    await wait_for_load()
+    await wait(2)
 
-    detail = js("""
+    detail = await js("""
     (function() {
       // Title
       var titleEl = document.querySelector('[data-testid="jobsearch-JobInfoHeader-title"], h1.jobsearch-JobInfoHeader-title');
@@ -324,15 +332,15 @@ import json
 from urllib.parse import quote_plus
 
 query = "product manager"
-goto(f"https://www.glassdoor.com/Job/jobs.htm?sc.keyword={quote_plus(query)}")
-wait_for_load()
-wait(3)   # Glassdoor JS rendering takes longer
+await goto(f"https://www.glassdoor.com/Job/jobs.htm?sc.keyword={quote_plus(query)}")
+await wait_for_load()
+await wait(3)   # Glassdoor JS rendering takes longer
 
 # Dismiss cookie banner if present
 dismiss_cookie_banner()
 
 # Extract cards before any scroll (avoid triggering login modal)
-jobs = js("""
+jobs = await js("""
 (function() {
   // Glassdoor job cards: li[data-jobid] or article[data-id]
   var cards = document.querySelectorAll('li[data-jobid], li[class*="JobsList_jobListItem"]');
@@ -378,14 +386,14 @@ jobs = js("""
 """)
 
 results = json.loads(jobs)
-for r in results:
+async for r in results:
     print(r)
 ```
 
 **If `jobs` returns an empty list**, Glassdoor has changed its DOM structure. Take a screenshot and inspect:
 
 ```python
-screenshot()
+await screenshot()
 # Look for the actual card selector, then update the querySelectorAll above
 ```
 
@@ -398,34 +406,34 @@ Glassdoor increasingly shows a login modal after viewing a few listings. Detect 
 ```python
 def dismiss_glassdoor_login_modal():
     """Close the Glassdoor sign-in / register modal if it appears."""
-    closed = js("""
+    closed = await js("""
     (function() {
       // Close button on the modal
       var closeBtn = document.querySelector(
         '[alt="Close"], button[class*="modal_closeIcon"], [data-test="close-modal"]'
       );
       if (closeBtn && closeBtn.offsetParent !== null) {
-        closeBtn.click();
+        closeBtn.await click();
         return 'closed';
       }
       // Sometimes the modal has an X with aria-label
       var ariaClose = document.querySelector('[aria-label="Close"]');
       if (ariaClose && ariaClose.offsetParent !== null) {
-        ariaClose.click();
+        ariaClose.await click();
         return 'aria-closed';
       }
       return null;
     })()
     """)
     if closed:
-        wait(1)
+        await wait(1)
     return closed
 
 # Strategy: extract as much as possible before the modal appears
 # If the modal blocks results, dismiss it and try again
 result = dismiss_glassdoor_login_modal()
 if result:
-    wait(1)
+    await wait(1)
     # Re-run extraction after dismissal
 ```
 
@@ -435,7 +443,7 @@ If the modal is persistent and cannot be closed, switch to Indeed for the same s
 
 ## Workflow 6: Stepstone (German) — job extraction
 
-Stepstone is server-rendered. Most data can be extracted with `http_get` for speed, or via `goto` + `js()` for dynamic content.
+Stepstone is server-rendered. Most data can be extracted with `http_get` for speed, or via `goto` + `await js()` for dynamic content.
 
 ```python
 import json, re
@@ -448,12 +456,12 @@ city = "Regensburg"
 kw_path = keyword.replace(" ", "-")
 city_path = city.replace(" ", "-")
 
-goto(f"https://www.stepstone.de/jobs/{kw_path}/in-{city_path}.html")
-wait_for_load()
-wait(2)
+await goto(f"https://www.stepstone.de/jobs/{kw_path}/in-{city_path}.html")
+await wait_for_load()
+await wait(2)
 dismiss_cookie_banner()
 
-jobs = js("""
+jobs = await js("""
 (function() {
   // Stepstone result cards
   var cards = document.querySelectorAll(
@@ -487,7 +495,7 @@ jobs = js("""
 """)
 
 results = json.loads(jobs)
-for r in results:
+async for r in results:
     print(r)
 ```
 
@@ -497,20 +505,20 @@ for r in results:
 import json
 
 all_jobs = []
-for page in range(1, 4):   # pages 1-3
+async for page in range(1, 4):   # pages 1-3
     if page == 1:
         url = f"https://www.stepstone.de/jobs/{kw_path}/in-{city_path}.html"
     else:
         url = f"https://www.stepstone.de/jobs/{kw_path}/in-{city_path}/page-{page}.html"
 
-    goto(url)
-    wait_for_load()
-    wait(2)
+    await goto(url)
+    await wait_for_load()
+    await wait(2)
 
     if page == 1:
         dismiss_cookie_banner()
 
-    batch_json = js("""
+    batch_json = await js("""
     (function() {
       var cards = document.querySelectorAll('article[data-at="job-item"], [data-genesis-element="JOB_CARD"]');
       var out = [];
@@ -548,7 +556,7 @@ Indeed search result links go through a tracking redirect. **Do not use those re
 
 ```python
 # Correct approach: extract data-jk from the card
-job_keys = js("""
+job_keys = await js("""
 JSON.stringify(
   Array.from(document.querySelectorAll('[data-jk]'))
     .map(el => el.getAttribute('data-jk'))
@@ -560,7 +568,7 @@ import json
 jks = json.loads(job_keys)
 
 # Canonical job detail URL for any job key:
-for jk in jks:
+async for jk in jks:
     direct_url = f"https://www.indeed.com/viewjob?jk={jk}"
     print(direct_url)
 ```
@@ -715,13 +723,13 @@ def indeed_http_search(query: str, location: str = "", fromage: int = 0, start: 
     if fromage:
         params += f"&fromage={fromage}"
 
-    html = http_get(
+    html = await js('fetch(" + r"
         f"https://www.indeed.com/jobs?{params}",
         headers={
             "Accept-Language": "en-US,en;q=0.9",
             "Accept": "text/html,application/xhtml+xml",
         }
-    )
+    " + r").then(r=>r.text())
 
     # Check for CAPTCHA before parsing
     if "captcha" in html.lower() or "robot check" in html.lower():
@@ -748,7 +756,7 @@ def indeed_http_search(query: str, location: str = "", fromage: int = 0, start: 
     )
 
     jobs = []
-    for r in results_list:
+    async for r in results_list:
         jk = r.get("jobkey", "")
         jobs.append({
             "jk":       jk,
@@ -764,11 +772,11 @@ def indeed_http_search(query: str, location: str = "", fromage: int = 0, start: 
 
 # Example — last 24h remote jobs
 jobs = indeed_http_search("software engineer", "remote", fromage=1)
-for j in jobs:
+async for j in jobs:
     print(j["title"], "|", j["company"], "|", j["salary"])
 ```
 
-If `http_get` returns 0 results (CAPTCHA or structure change), fall back to the `goto` + `js()` browser workflow above.
+If `http_get` returns 0 results (CAPTCHA or structure change), fall back to the `goto` + `await js()` browser workflow above.
 
 ---
 
@@ -779,11 +787,11 @@ Some Indeed listings apply on Indeed directly ("Easy Apply") while others redire
 ```python
 def get_application_type(jk: str) -> dict:
     """Returns {type: 'easy_apply'|'external'|'unknown', external_url: str|None}"""
-    goto(f"https://www.indeed.com/viewjob?jk={jk}")
-    wait_for_load()
-    wait(2)
+    await goto(f"https://www.indeed.com/viewjob?jk={jk}")
+    await wait_for_load()
+    await wait(2)
 
-    return js("""
+    return await js("""
     (function() {
       // "Apply now" button pointing to /applystart = indeed-hosted Easy Apply
       var easyBtn = document.querySelector(
@@ -832,9 +840,9 @@ MAX_HTTP_CONCURRENT = 2  # never more than 2 at once for Indeed/Glassdoor
 ```python
 def is_captcha_page() -> bool:
     """Check if the current page is a CAPTCHA or block page."""
-    url = page_info()["url"]
-    title = js("document.title") or ""
-    body_text = js("document.body ? document.body.innerText.substring(0, 500) : ''") or ""
+    url = await page_info()["url"]
+    title = await js("document.title") or ""
+    body_text = await js("document.body ? document.body.innerText.substring(0, 500) : ''") or ""
 
     signals = [
         "captcha" in url.lower(),
@@ -848,23 +856,23 @@ def is_captcha_page() -> bool:
     return any(signals)
 
 # Use after every goto:
-goto(some_url)
-wait_for_load()
-wait(2)
+await goto(some_url)
+await wait_for_load()
+await wait(2)
 if is_captcha_page():
-    screenshot()
+    await screenshot()
     # Wait longer and retry once
-    wait(10)
-    goto(some_url)
-    wait_for_load()
-    wait(3)
+    await wait(10)
+    await goto(some_url)
+    await wait_for_load()
+    await wait(3)
 ```
 
 ### Glassdoor session hygiene
 
 Glassdoor's bot detection is more fingerprint-based. If results stop loading:
 
-1. Take a `screenshot()` — confirm whether it is a login modal vs a block page
+1. Take a `await screenshot()` — confirm whether it is a login modal vs a block page
 2. Dismiss any login modal first (`dismiss_glassdoor_login_modal()`)
 3. If a block page appears, pause 30+ seconds before retrying
 4. Switch to Indeed for the same query — results are similar and bot tolerance is higher
@@ -923,9 +931,9 @@ def collect_indeed_jobs(query: str, location: str = "", max_results: int = 20,
     while len(all_jobs) < max_results:
         start = page * 10
         url = build_indeed_url(query, location, fromage=fromage, job_type=job_type, start=start)
-        goto(url)
-        wait_for_load()
-        wait(2.5)
+        await goto(url)
+        await wait_for_load()
+        await wait(2.5)
 
         if page == 0:
             dismiss_cookie_banner()
@@ -934,7 +942,7 @@ def collect_indeed_jobs(query: str, location: str = "", max_results: int = 20,
             print(f"CAPTCHA on page {page+1}, stopping")
             break
 
-        batch_json = js("""
+        batch_json = await js("""
         (function() {
           var cards = document.querySelectorAll('[data-jk]');
           var out = [];
@@ -986,7 +994,7 @@ jobs = collect_indeed_jobs("machine learning engineer", max_results=30, fromage=
 
 - **Indeed redirect links are NOT stable URLs** — Anchor `href` values in search results go through `https://www.indeed.com/rc/clk?...` tracking redirects which expire. Always extract `data-jk` from the card and construct `https://www.indeed.com/viewjob?jk={jk}` yourself.
 
-- **Salary is on the detail page, not the card** — Many listings show no salary in the search result card. If salary is required, fetch the individual `viewjob?jk=` page and extract it there. Budget `wait(3)` per detail page and do not fetch more than 5 detail pages per minute.
+- **Salary is on the detail page, not the card** — Many listings show no salary in the search result card. If salary is required, fetch the individual `viewjob?jk=` page and extract it there. Budget `await wait(3)` per detail page and do not fetch more than 5 detail pages per minute.
 
 - **"Employer est." vs "Glassdoor est."** — These are two distinct data signals. Employer estimates come from the job post itself; Glassdoor estimates are crowd-sourced. The distinction matters when reporting salary accuracy to users.
 
@@ -1000,7 +1008,7 @@ jobs = collect_indeed_jobs("machine learning engineer", max_results=30, fromage=
 
 - **`http_get` for Glassdoor fails more often** — Glassdoor requires JS to render job cards. Use the browser path for Glassdoor. `http_get` only works reliably for Indeed and Stepstone where server-rendered HTML contains structured data.
 
-- **Indeed embeds JSON in a `<script>` tag** — The `window.mosaic.providerData` block in the HTML source is the fastest extraction path but it can break if Indeed changes the key. Always have the DOM-based `js()` approach as a fallback.
+- **Indeed embeds JSON in a `<script>` tag** — The `window.mosaic.providerData` block in the HTML source is the fastest extraction path but it can break if Indeed changes the key. Always have the DOM-based `await js()` approach as a fallback.
 
 - **Date strings are relative, not absolute** — "3 days ago", "30+ days ago", "Just posted" — none of these are machine-parseable dates without a reference point. Use `datetime.utcnow()` as the reference. "30+" means at least 30 days ago; treat as stale.
 
@@ -1012,7 +1020,7 @@ jobs = collect_indeed_jobs("machine learning engineer", max_results=30, fromage=
 
 - **User-agent matters** — `http_get` uses `Mozilla/5.0` by default (see `helpers.py`). For Indeed `http_get`, also set `Accept-Language: en-US,en;q=0.9` to avoid getting German or localized results based on IP geolocation.
 
-- **Stepstone cookie modal is fullscreen** — On first load, Stepstone shows a fullscreen consent overlay that blocks the entire page. Always call `dismiss_cookie_banner()` before any extraction. If the overlay cannot be dismissed with the generic pattern, use a coordinate click: `screenshot()` first to find the "Alle akzeptieren" (Accept all) button position, then `click(x, y)`.
+- **Stepstone cookie modal is fullscreen** — On first load, Stepstone shows a fullscreen consent overlay that blocks the entire page. Always call `dismiss_cookie_banner()` before any extraction. If the overlay cannot be dismissed with the generic pattern, use a coordinate click: `await screenshot()` first to find the "Alle akzeptieren" (Accept all) button position, then `await click(x, y)`.
 
 - **Glassdoor salary in card vs detail** — Salary text in the card may be truncated ("$90K - $120K (Glassdoor est.)"). The full salary breakdown (base, bonus, total comp) is only on the job detail page, which requires a click through.
 
