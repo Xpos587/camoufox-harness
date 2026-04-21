@@ -316,6 +316,26 @@ async def close_tab() -> dict:
     return {"closed": True}
 
 
+async def iframe_target(url_substr: str) -> Optional:
+    """Find first iframe whose URL contains `url_substr`. Returns frame object or None.
+
+    Usage:
+        frame = await iframe_target("checkout.com")
+        if frame:
+            await frame.locator("#pay").click()
+            await frame.locator("#email").fill("test@example.com")
+    """
+    if not url_substr:
+        return None
+
+    await _ensure_connection()
+    for frame in _page.frames:
+        frame_url = getattr(frame, 'url', '') or ''
+        if frame_url and url_substr in frame_url:
+            return frame
+    return None
+
+
 # --- cookie/storage ---
 async def get_cookies() -> list:
     """Get all cookies."""
