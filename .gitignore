@@ -1,0 +1,28 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+*.egg-info/
+
+# Environment
+.env
+
+# Logs
+*.log
+/tmp/
+
+# Profiles (may contain sensitive data)
+.config/camoufox-harness/profiles/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
