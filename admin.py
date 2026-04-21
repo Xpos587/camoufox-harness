@@ -1,29 +1,41 @@
 # /// script
 # dependencies = [
-#   "httpx>=0.25.0",
+#   "camoufox[geoip]>=0.4.0",
 #   "psutil>=5.9.0",
 # ]
 # ///
 
-"""Daemon management for Camoufox Harness.
-
-Run with: uv run admin.py
-"""
+"""Manage Camoufox remote server daemon."""
+import asyncio
 import os
 import signal
-import subprocess
 import sys
 import time
 from pathlib import Path
+from threading import Thread
 
-import httpx
 import psutil
 
 
 NAME = os.environ.get("CH_NAME", "default")
-API_URL = os.environ.get("CH_API_URL", "http://127.0.0.1:8765")
+PORT = int(os.environ.get("CH_PORT", "9222"))
+WS_PATH = os.environ.get("CH_WS_PATH", "camoufox")
 PID_FILE = Path(f"/tmp/camoufox-harness-{NAME}.pid")
-DAEMON_SCRIPT = Path(__file__).parent / "daemon.py"
+
+# Server instance (global for stop)
+_server_thread = None
+
+
+def run_server():
+    """Run Camoufox remote server (blocking)."""
+    from camoufox.server import launch_server
+    launch_server(
+        headless=True,
+        humanize=True,
+        geoip=True,
+        port=PORT,
+        ws_path=WS_PATH,
+    )
 
 
 def is_running():
@@ -37,94 +49,62 @@ def is_running():
         return False
 
 
-def is_responsive():
-    """Check if daemon API is responding."""
-    try:
-        with httpx.Client() as client:
-            r = client.get(f"{API_URL}/health", timeout=2.0)
-            return r.status_code == 200
-    except httpx.HTTPError:
-        return False
-
-
 def start_daemon():
-    """Start the daemon process."""
+    """Start Camoufox remote server in background thread."""
+    global _server_thread
+
     if is_running():
         print(f"Daemon already running (name={NAME})", file=sys.stderr)
         return
-    
-    print(f"Starting Camoufox daemon (name={NAME})...", file=sys.stderr)
-    
-    # Start daemon in background
-    log_file = Path(f"/tmp/camoufox-harness-{NAME}.log")
-    process = subprocess.Popen(
-        ["uv", "run", str(DAEMON_SCRIPT)],
-        start_new_session=True,
-        stdout=log_file.open("a"),
-        stderr=subprocess.STDOUT,
-    )
-    
-    # Wait for daemon to become responsive
-    deadline = time.time() + 30
-    while time.time() < deadline:
-        if is_responsive():
-            print(f"Daemon started (PID={process.pid})", file=sys.stderr)
-            return
-        time.sleep(0.5)
-    
-    raise RuntimeError("Daemon failed to start within 30 seconds")
+
+    print(f"Starting Camoufox daemon (name={NAME}, port={PORT})...", file=sys.stderr)
+
+    _server_thread = Thread(target=run_server, daemon=True)
+    _server_thread.start()
+
+    # Write PID (main process PID)
+    PID_FILE.write_text(str(os.getpid()))
+    print(f"Daemon started (WS: ws://localhost:{PORT}/{WS_PATH})", file=sys.stderr)
 
 
 def stop_daemon():
-    """Stop the daemon process."""
+    """Stop daemon."""
     if not PID_FILE.exists():
         print("Daemon not running", file=sys.stderr)
         return
-    
+
     try:
         pid = int(PID_FILE.read_text())
         os.kill(pid, signal.SIGTERM)
-        
-        # Wait for process to exit
-        deadline = time.time() + 10
-        while time.time() < deadline:
-            if not psutil.pid_exists(pid):
-                print(f"Daemon stopped (PID={pid})", file=sys.stderr)
-                return
-            time.sleep(0.2)
-        
-        # Force kill if needed
-        os.kill(pid, signal.SIGKILL)
-        print(f"Daemon force killed (PID={pid})", file=sys.stderr)
-    except (ValueError, psutil.NoSuchProcess, ProcessLookupError):
-        pass
-    finally:
+        PID_FILE.unlink()
+        print(f"Daemon stopped (PID={pid})", file=sys.stderr)
+    except (ValueError, ProcessLookupError):
         try:
             PID_FILE.unlink()
-        except FileNotFoundError:
+        except:
             pass
 
 
 def restart_daemon():
-    """Restart the daemon."""
+    """Restart daemon."""
     stop_daemon()
     time.sleep(1)
     start_daemon()
 
 
-def ensure_daemon():
-    """Ensure daemon is running, start if not."""
-    if is_running() and is_responsive():
+async def ensure_daemon():
+    """Ensure daemon is running."""
+    if is_running():
         return
     start_daemon()
+    await asyncio.sleep(2)  # Wait for server startup
 
 
 def status():
     """Show daemon status."""
     if is_running():
         pid = int(PID_FILE.read_text())
-        responsive = is_responsive()
-        print(f"Daemon: running (PID={pid}, responsive={responsive})")
+        print(f"Daemon: running (PID={pid}, WS: ws://localhost:{PORT}/{WS_PATH})")
     else:
         print("Daemon: not running")
 
@@ -144,5 +124,4 @@ if __name__ == "__main__":
             print(f"Unknown command: {cmd}", file=sys.stderr)
             sys.exit(1)
     else:
-        # Default: ensure daemon is running
-        ensure_daemon()
+        asyncio.run(ensure_daemon())
