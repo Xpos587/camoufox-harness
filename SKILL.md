@@ -96,6 +96,7 @@ await load_profile("github-session")
 3. **Check for blocking** after navigation
 4. **Save profiles** for session persistence
 5. **Always use async/await** — all functions are async
+6. **Contribute domain skills** — When you learn non-obvious patterns about a site, save them with `save_domain_skill()`
 
 ## Example: E-commerce Search
 
@@ -131,4 +132,39 @@ events = await drain_events()
 # Filter for specific event types
 dialogs = [e for e in events if e.get('type') == 'dialog']
 errors = [e for e in events if e.get('type') == 'error']
+```
+
+## Domain Skills
+
+Domain skills are auto-generated `.md` files containing learned patterns for specific websites. When you navigate to a site, `goto()` returns available skills.
+
+```python
+# Navigate and check for existing skills
+result = await goto("https://github.com")
+print(result["domain_skills"])  # ['20260421-123456.md', ...]
+
+# Save learned patterns
+await save_domain_skill("github", """
+# GitHub Login Patterns
+
+## Stable Selectors
+- Login button: `[href="/login"]`
+- Email input: `#login_field`
+
+## URL Patterns
+- Direct login: https://github.com/login
+- Session persists across subdomains
+
+## Traps
+- Avoid `.js-*` classes (obfuscated)
+- 2FA may appear after successful auth
+""")
+```
+
+**What to save in domain skills:**
+- Private API endpoints
+- Stable selectors (`data-*`, `aria-*`, `role`)
+- URL patterns and query params
+- Framework quirks
+- Traps and selectors that DON'T work
 ```
