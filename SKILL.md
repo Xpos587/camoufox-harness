@@ -56,8 +56,7 @@ imageio[ffmpeg]>=2.31.0
 Run from the skill directory (script is self-executing via PEP 723):
 
 ```bash
-cd code
-./run.py <<'PY'
+./camoufox-harness <<'PY'
 await goto("https://example.com")
 await wait_for_load()
 print(await page_info())
