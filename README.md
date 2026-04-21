@@ -8,6 +8,7 @@
 - **Playwright Async API**: Modern async browser automation
 - **Event-Driven**: Real-time events (dialog detection, console logs, errors)
 - **Persistent Context**: All data survives restarts (cookies, localStorage, session)
+- **Video Recording**: Screen capture via Playwright screenshots (works in headless mode)
 - **Domain Skills**: Auto-generated patterns for websites (private APIs, stable selectors, traps)
 - **PEP 723**: Inline dependencies — no venv locking
 
@@ -25,6 +26,26 @@ await wait_for_load()
 print(await page_info())
 PY
 ```
+
+## Video Recording
+
+Record agent actions as MP4 video:
+
+```python
+uv run run.py <<'PY'
+async def demo():
+    await goto("https://example.com")
+    await wait_for_load()
+    await screenshot("/tmp/before.png")
+    await scroll("down", 500)
+    await screenshot("/tmp/after.png")
+
+info = await record_screen("/tmp/videos", demo, fps=10)
+print(f"Video: {info['video_path']}, Frames: {info['frames']}")
+PY
+```
+
+Works in headless mode (uses Playwright screenshots, not screen capture).
 
 ## Configuration
 

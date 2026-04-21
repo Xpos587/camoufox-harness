@@ -2,6 +2,7 @@
 import asyncio
 import os
 import random
+import time
 from collections import deque
 from datetime import datetime
 from functools import wraps
@@ -190,6 +191,125 @@ async def snapshot() -> dict:
         return 1 + sum(count(c) for c in node.get("children", [])) if isinstance(node, dict) else 0
 
     return {"snapshot": snap, "element_count": count(snap)}
+
+
+@_connected
+async def get_video_path() -> Optional[str]:
+    """Get path to video file for current page. Returns None if recording disabled.
+    
+    Note: Only works when using record_screen() - not continuous recording.
+    """
+    return None  # Screenshots don't support path query during recording
+
+
+async def record_screen(video_dir: str, func, fps: int = 10):
+    """Record page actions as screenshot sequence + video.
+
+    Captures screenshots after each action, combines to MP4.
+    Works in headless mode (uses Playwright screenshots).
+
+    Args:
+        video_dir: Directory to save video
+        func: Async function to execute while recording
+        fps: Target FPS (affects screenshot timing)
+
+    Returns:
+        {video_path, result}
+
+    Example:
+        async def demo():
+            await goto("https://example.com")
+            await click("button")
+
+        info = await record_screen("/tmp/videos", demo)
+        print(f"Video: {info['video_path']}")
+    """
+    await _ensure_connection()
+    Path(video_dir).mkdir(parents=True, exist_ok=True)
+    
+    # Track screenshots and timing
+    screenshots = []
+    start_time = time.time()
+    result = None
+    
+    # Wrap page.screenshot to capture all actions
+    original_screenshot = _page.screenshot
+    screenshot_dir = Path(video_dir) / "frames"
+    screenshot_dir.mkdir(exist_ok=True)
+    
+    async def capturing_screenshot(**kwargs):
+        """Wrapper that saves screenshots for video compilation."""
+        timestamp = time.time() - start_time
+        data = await original_screenshot(**kwargs)
+        
+        # Save with timestamp in filename for ordering
+        frame_path = screenshot_dir / f"frame_{len(screenshots):04d}.png"
+        frame_path.write_bytes(data)
+        screenshots.append({"path": str(frame_path), "time": timestamp})
+        
+        return data
+    
+    # Temporarily replace screenshot method
+    _page.screenshot = capturing_screenshot
+    
+    # Auto-capture at intervals
+    capture_task = None
+    
+    async def auto_capture():
+        """Capture screenshots periodically."""
+        while True:
+            await asyncio.sleep(1.0 / fps)
+            try:
+                await _page.screenshot(full_page=False)
+            except:
+                break
+    
+    try:
+        # Start auto-capture
+        capture_task = asyncio.create_task(auto_capture())
+        
+        # Run user function
+        result = await func()
+        
+    finally:
+        # Stop auto-capture
+        if capture_task:
+            capture_task.cancel()
+            try:
+                await capture_task
+            except asyncio.CancelledError:
+                pass
+        
+        # Restore original screenshot
+        _page.screenshot = original_screenshot
+    
+    # Compile screenshots to video
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    video_path = str(Path(video_dir) / f"recording-{timestamp}.mp4")
+    
+    if screenshots:
+        try:
+            from PIL import Image
+            import imageio
+            
+            # Load screenshots in order
+            frames = [Image.open(s["path"]) for s in screenshots]
+            
+            # Save as MP4
+            imageio.mimsave(video_path, frames, fps=fps)
+            
+            # Cleanup frame files
+            for s in screenshots:
+                Path(s["path"]).unlink(missing_ok=True)
+            screenshot_dir.rmdir()
+            
+        except ImportError:
+            # Fallback: save first screenshot as PNG
+            fallback_path = str(Path(video_dir) / f"recording-{timestamp}.png")
+            Path(screenshots[0]["path"]).rename(fallback_path)
+            video_path = fallback_path
+    
+    return {"video_path": video_path, "result": result, "frames": len(screenshots)}
 
 
 @_connected
