@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 from typing import Optional
 
-import requests
+import httpx
 
 
 def _load_env():
@@ -18,7 +18,7 @@ def _load_env():
         if not line or line.startswith("#") or "=" not in line:
             continue
         k, v = line.split("=", 1)
-        os.environ.setdefault(k.strip(), v.strip().strip('"').strip("''))
+        os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
 
 _load_env()
@@ -31,22 +31,34 @@ INTERNAL = ("about:", "data:", "chrome://", "chrome-extension://")
 PROFILE_DIR = Path.home() / ".config" / "camoufox-harness" / "profiles" / NAME
 PROFILE_DIR.mkdir(parents=True, exist_ok=True)
 
+# HTTP client for API calls
+_client = None
+
+
+def _get_client():
+    """Get or create HTTP client."""
+    global _client
+    if _client is None:
+        _client = httpx.Client(timeout=30.0)
+    return _client
+
 
 def _api_call(method: str, path: str, data: dict = None) -> dict:
     """Make API call to daemon."""
     url = f"{API_URL}{path}"
+    client = _get_client()
     try:
         if method == "GET":
-            r = requests.get(url, params=data, timeout=30)
+            r = client.get(url, params=data)
         elif method == "POST":
-            r = requests.post(url, json=data, timeout=30)
+            r = client.post(url, json=data)
         elif method == "DELETE":
-            r = requests.delete(url, json=data, timeout=30)
+            r = client.delete(url, json=data)
         else:
             raise ValueError(f"Unknown method: {method}")
         r.raise_for_status()
         return r.json()
-    except requests.RequestException as e:
+    except httpx.HTTPError as e:
         raise RuntimeError(f"API call failed: {e}")
 
 

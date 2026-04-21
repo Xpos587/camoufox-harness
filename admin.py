@@ -1,6 +1,6 @@
 # /// script
 # dependencies = [
-#   "requests>=2.31.0",
+#   "httpx>=0.25.0",
 #   "psutil>=5.9.0",
 # ]
 # ///
@@ -16,7 +16,7 @@ import sys
 import time
 from pathlib import Path
 
-import requests
+import httpx
 import psutil
 
 
@@ -40,9 +40,10 @@ def is_running():
 def is_responsive():
     """Check if daemon API is responding."""
     try:
-        r = requests.get(f"{API_URL}/health", timeout=2)
-        return r.status_code == 200
-    except requests.RequestException:
+        with httpx.Client() as client:
+            r = client.get(f"{API_URL}/health", timeout=2.0)
+            return r.status_code == 200
+    except httpx.HTTPError:
         return False
 
 
@@ -55,10 +56,11 @@ def start_daemon():
     print(f"Starting Camoufox daemon (name={NAME})...", file=sys.stderr)
     
     # Start daemon in background
+    log_file = Path(f"/tmp/camoufox-harness-{NAME}.log")
     process = subprocess.Popen(
         ["uv", "run", str(DAEMON_SCRIPT)],
         start_new_session=True,
-        stdout=Path(f"/tmp/camoufox-harness-{NAME}.log").open("a"),
+        stdout=log_file.open("a"),
         stderr=subprocess.STDOUT,
     )
     
