@@ -7,8 +7,7 @@
 - **Anti-Detect**: Human-like behavior, fingerprint randomization, geoip spoofing
 - **Playwright Async API**: Modern async browser automation
 - **Event-Driven**: Real-time events (dialog detection, console logs, errors)
-- **Camoufox Remote Server**: WebSocket endpoint for browser control
-- **Profile Persistence**: Save/load browser sessions
+- **Persistent Context**: All data survives restarts (cookies, localStorage, session)
 - **Domain Skills**: Auto-generated patterns for websites (private APIs, stable selectors, traps)
 - **PEP 723**: Inline dependencies — no venv locking
 
@@ -17,19 +16,41 @@
 ```bash
 git clone https://github.com/Xpos587/camoufox-harness
 cd camoufox-harness
-uv run admin.py start
 ```
 
 ```python
 uv run run.py <<'PY'
-import asyncio
-async def test():
-    await goto("https://example.com")
-    await wait_for_load()
-    print(await page_info())
-asyncio.run(test())
+await goto("https://example.com")
+await wait_for_load()
+print(await page_info())
 PY
 ```
+
+## Configuration
+
+Create `.env` file (optional):
+
+```bash
+# Browser settings
+CH_HEADLESS=true          # Headless mode
+CH_HUMANIZE=true           # Human-like delays
+CH_GEOIP=true              # Auto geolocation
+CH_LOCALE=en-US            # Language/region
+
+# Instance name (for multiple profiles)
+CH_NAME=default
+```
+
+## Data Persistence
+
+All browser data persists in `~/.config/camoufox-harness/profiles/<CH_NAME>/`:
+
+- Cookies
+- localStorage
+- Session state
+- Extensions
+
+No manual save/load needed — just restart and continue where you left off.
 
 ## Documentation
 
@@ -54,22 +75,22 @@ PY
 ## Architecture
 
 ```
-┌─────────────┐    WebSocket    ┌──────────────────┐    Playwright    ┌──────────┐
-│   Agent     │ ◀─────────────▶ │ Camoufox Remote  │ ────────────────▶ │ Camoufox │
-│ (run.py)    │   (connect)     │ Server           │                  │ (Firefox) │
-└─────────────┘                 └──────────────────┘                  └──────────┘
+┌─────────────┐    Async API    ┌──────────────────┐    Playwright    ┌──────────┐
+│   Agent     │ ────────────────▶ │  Persistent     │ ────────────────▶ │ Camoufox │
+│ (run.py)    │   (direct)       │  BrowserContext │                  │ (Firefox) │
+└─────────────┘                  └──────────────────┘                  └──────────┘
 ```
 
-Camoufox remote server provides WebSocket endpoint. Agent connects via Playwright's `firefox.connect()`. Events flow through Playwright event handlers.
+Camoufox `AsyncNewBrowser` with `persistent_context=True` provides direct browser control. Data persists on disk between runs.
 
 ## Anti-Detect Features
 
 | Feature | Description |
 |---------|-------------|
 | **humanize** | Random delays, human-like cursor movement |
-| **geoip** | Geolocation spoofing |
-| **fingerprint** | Randomized browser fingerprint |
-| **nagle** | Network timing optimization |
+| **geoip** | Geolocation spoofing based on IP |
+| **fingerprint** | Randomized browser fingerprint via BrowserForge |
+| **UBO** | uBlock Origin with ad/tracker blocking |
 
 ## License
 

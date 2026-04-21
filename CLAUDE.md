@@ -13,6 +13,7 @@ Browser automation harness использующий Playwright async API + Camou
 ## Ключевые особенности
 
 - **Async/await** — все функции асинхронные (современный Python)
+- **Persistent Context** — данные сохраняются на диск (cookies, localStorage, сессии)
 - **Event-driven** — dialog, load, console, error события через `drain_events()`
 - **Anti-detect** — humanize (случайные задержки), geoip (спуфинг локации), fingerprint randomization
 - **Domain skills** — автогенерация паттернов для сайтов (private APIs, stable selectors, traps)
@@ -22,8 +23,7 @@ Browser automation harness использующий Playwright async API + Camou
 
 ```
 camoufox-harness/
-├── helpers.py              # Все async функции (41 функция)
-├── admin.py                # Daemon management (start/stop/status)
+├── helpers.py              # Все async функции (40+ функций)
 ├── run.py                  # CLI entry point (PEP 723 inline deps)
 ├── pyproject.toml          # Project metadata + dependencies
 ├── interaction-skills/     # Reusable UI patterns (19 skills)
@@ -41,7 +41,6 @@ camoufox-harness/
 ```bash
 git clone https://github.com/Xpos587/camoufox-harness
 cd camoufox-harness
-uv run admin.py start
 ```
 
 ## Использование
@@ -64,20 +63,31 @@ dialogs = [e for e in events if e["type"] == "dialog"]
 ## Architecture
 
 ```
-┌─────────────┐    WebSocket    ┌──────────────────┐    Playwright    ┌──────────┐
-│   Agent     │ ◀─────────────▶ │ Camoufox Remote  │ ────────────────▶ │ Camoufox │
-│ (run.py)    │   (connect)     │ Server           │                  │ (Firefox) │
-└─────────────┘                 └──────────────────┘                  └──────────┘
+┌─────────────┐    Async API    ┌──────────────────┐    Playwright    ┌──────────┐
+│   Agent     │ ────────────────▶ │  Persistent     │ ────────────────▶ │ Camoufox │
+│ (run.py)    │   (direct)       │  BrowserContext │                  │ (Firefox) │
+└─────────────┘                  └──────────────────┘                  └──────────┘
 ```
 
-Camoufox remote server предоставляет WebSocket endpoint. Агент подключается через Playwright's `firefox.connect()`. События flow через Playwright event handlers.
+Camoufox AsyncNewBrowser с persistent_context=True. Данные сохраняются в `~/.config/camoufox-harness/profiles/`.
 
 ## Environment Variables (.env)
 
 ```bash
 CH_NAME=default                    # Instance name (для multiple browsers)
-CH_WS_URL=ws://127.0.0.1:9222/camoufox  # WebSocket URL
-CH_PORT=9222                       # Daemon port
+CH_HEADLESS=true                   # Headless mode
+CH_HUMANIZE=true                    # Human-like delays
+CH_GEOIP=true                       # Auto geolocation
+CH_LOCALE=en-US                     # Language/region
+```
+
+### Persistent Profile
+
+```
+~/.config/camoufox-harness/profiles/<CH_NAME>/
+├── cookies.sqlite          # Cookies (сохраняются автоматически)
+├── storage/                # localStorage, IndexedDB
+└── extensions/             # Расширения (UBO и т.д.)
 ```
 
 ## Ключевые функции helpers.py
