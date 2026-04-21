@@ -90,10 +90,22 @@ async def _ensure_connection():
 
 # --- navigation / page ---
 async def goto(url: str, wait_until: str = "domcontentloaded") -> dict:
-    """Navigate to URL. Returns {url, title}."""
+    """Navigate to URL. Returns {url, title, domain_skills}."""
     await _ensure_connection()
     await _page.goto(url, wait_until=wait_until)
-    return {"url": _page.url, "title": await _page.title()}
+    # Check for domain skills
+    from urllib.parse import urlparse
+    domain = urlparse(url).hostname or ""
+    domain = domain.removeprefix("www.").split(".")[0]
+    skill_dir = Path(__file__).parent / "domain-skills" / domain
+    skills = []
+    if skill_dir.exists():
+        skills = sorted(p.name for p in skill_dir.rglob("*.md"))[:10]
+    return {
+        "url": _page.url,
+        "title": await _page.title(),
+        "domain_skills": skills
+    }
 
 
 async def page_info() -> dict:
