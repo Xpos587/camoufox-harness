@@ -53,12 +53,10 @@ imageio[ffmpeg]>=2.31.0
 
 ## Quick Start
 
-This skill uses a persistent installation at `~/Skills/camoufox-harness/code/`.
+Camoufox Harness is available as `camoufox-harness` command:
 
 ```bash
-# Already cloned! Run directly:
-cd ~/Skills/camoufox-harness/code
-uv run run.py <<'PY'
+camoufox-harness <<'PY'
 await goto("https://example.com")
 await wait_for_load()
 print(await page_info())
@@ -298,7 +296,6 @@ with open("results.json", "w") as f:
 - **Selectors**: Use CSS selectors, avoid obfuscated classes
 - **Dynamic content**: Use `await wait(1-2)` after page load for JS rendering
 - **Profile persistence**: Data survives restarts in `~/.config/camoufox-harness/profiles/`
-- **Skill location**: All commands run from `~/Skills/camoufox-harness/code/`
 
 ## Repository
 
