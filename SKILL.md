@@ -53,11 +53,11 @@ imageio[ffmpeg]>=2.31.0
 
 ## Quick Start
 
-Run automation from the skill directory:
+Run from the skill directory (script is self-executing via PEP 723):
 
 ```bash
 cd code
-uv run run.py <<'PY'
+./run.py <<'PY'
 await goto("https://example.com")
 await wait_for_load()
 print(await page_info())

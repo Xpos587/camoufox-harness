@@ -1,6 +1,9 @@
+#!/usr/bin/env -S uv run --script
 # /// script
+# requires-python = ">=3.11"
 # dependencies = [
 #   "playwright>=1.40.0",
+#   "camoufox[geoip]>=0.4.0",
 #   "pillow>=10.0.0",
 #   "numpy>=1.24.0",
 #   "imageio[ffmpeg]>=2.31.0",
